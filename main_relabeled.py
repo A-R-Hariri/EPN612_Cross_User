@@ -1,7 +1,7 @@
 import warnings, sys, os, gc
 from os.path import join
 warnings.filterwarnings("ignore")
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1] if len(sys.argv) > 1 else "0"
 
 import torch; print(torch.cuda.is_available())
 
@@ -58,6 +58,7 @@ test_meta_relabeled = np.load(join(PICKLE_PATH, 'test_meta_relabeled.npy'), allo
 
 
 # ======== PIPELINE ========
+
 train_loader = create_loader(train_windows, train_meta['classes'], 
                             batch=BATCH_SIZE, shuffle=True)
 val_loader = create_loader(val_windows, val_meta['classes'], 
@@ -86,21 +87,21 @@ test_loader_relabeled = create_loader(test_windows_relabeled,
                             batch=BATCH_SIZE, shuffle=False)
 
 
-NAME = "cnn_raw"
+NAME = "cnn_relabeled"
 model = CNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 weights = torch.tensor(compute_class_weight('balanced', 
                                classes=np.arange(CLASSES), 
-                                y=train_meta['classes']),
+                                y=train_meta_relabeled['classes']),
                                 dtype=torch.float32,
                                 device=DEVICE)
 train(model=model, name=NAME, 
-      train_loader=train_loader,
-      val_loader=val_loader, 
+      train_loader=train_loader_relabeled,
+      val_loader=val_loader_relabeled, 
       loss_fn=nn.CrossEntropyLoss(weight=weights),
       save_chkp=SAVE_CHKP)
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, "f{NAME}.pt")))
 eval_test(model=model, name=NAME, 
           loaders={'raw': test_loader, 
                    'segmented': test_loader_segmented, 
@@ -110,17 +111,17 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = "cnn_raw_eq"
+NAME = "cnn_relabeled_eq"
 model = CNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 weights = torch.tensor(compute_class_weight('balanced', 
                                classes=np.arange(CLASSES), 
-                                y=train_meta['classes']),
+                                y=train_meta_relabeled['classes']),
                                 dtype=torch.float32,
                                 device=DEVICE)
 train(model=model, name=NAME, 
-      train_loader=train_loader,
-      val_loader=val_loader, 
+      train_loader=train_loader_relabeled,
+      val_loader=val_loader_relabeled, 
       loss_fn=EqLoss(weight=weights),
       save_chkp=SAVE_CHKP)
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
@@ -134,17 +135,17 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = "cnn_raw_rest"
+NAME = "cnn_relabeled_rest"
 model = CNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 weights = torch.tensor(compute_class_weight('balanced', 
                                classes=np.arange(CLASSES), 
-                                y=train_meta['classes']),
+                                y=train_meta_relabeled['classes']),
                                 dtype=torch.float32,
                                 device=DEVICE)
 train(model=model, name=NAME, 
-      train_loader=train_loader,
-      val_loader=val_loader, 
+      train_loader=train_loader_relabeled,
+      val_loader=val_loader_relabeled, 
       loss_fn=RestLoss(1.0, 1.0, weight=weights),
       save_chkp=SAVE_CHKP)
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
@@ -156,3 +157,5 @@ eval_test(model=model, name=NAME,
            metas={'raw': test_meta, 
                   'segmented': test_meta_segmented, 
                   'relabeled': test_meta_relabeled})
+
+
