@@ -1,4 +1,4 @@
-import os, copy, time
+import os, copy, time, math
 import numpy as np, pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
@@ -25,7 +25,7 @@ DTYPE = np.float32
 PICKLE_PATH = 'pickles'; CHECKPOINT_PATH = 'checkpoints'; FIGURE_PATH = 'figures'
 SEQ = 40; INC = 2; CH = 8; CLASSES = 5; VAL_CUTOFF = 332
 WORKERS = 4; PRE_FETCH = 2; VERBOSE=True; DEVICE = 'cuda'
-UPDATE_EVERY = 50; PRESIST_WORKER = True; PIN_MEMORY = True
+UPDATE_EVERY = 50; PRESIST_WORKER = False; PIN_MEMORY = True
 
 EPOCHS = 200; BATCH_SIZE = 512; DROPOUT = 0.2; PATIENCE = 10
 LR_FACTOR = 0.6; LR_PATIENCE = 4; LR_INIT = 1e-4; LR_MIN = 1e-5
@@ -39,7 +39,8 @@ def count_params(m):
 # ======== DATA LOADER ========
 def create_loader(x, y, batch=BATCH_SIZE, shuffle=False, 
                   workers=WORKERS, prefetch_factor=PRE_FETCH,
-                  persistent_workers=PRESIST_WORKER):
+                  persistent_workers=PRESIST_WORKER,
+                  pin_memory=PIN_MEMORY):
     return DataLoader(
     TensorDataset(torch.from_numpy(x), 
                   torch.from_numpy(y)),
@@ -50,35 +51,31 @@ def create_loader(x, y, batch=BATCH_SIZE, shuffle=False,
     num_workers=workers,
     prefetch_factor=prefetch_factor if workers > 0 else None,
     persistent_workers=persistent_workers,
-    pin_memory=PIN_MEMORY,
+    pin_memory=pin_memory,
+    drop_last=False)
+
+
+def create_loader_grl(x, y, s, batch=BATCH_SIZE, shuffle=False, 
+                  workers=WORKERS, prefetch_factor=PRE_FETCH,
+                  persistent_workers=PRESIST_WORKER,
+                  pin_memory=PIN_MEMORY):
+    return DataLoader(
+    TensorDataset(torch.from_numpy(x), 
+                  torch.from_numpy(y),
+                  torch.from_numpy(s)),
+                #   torch.tensor(x), 
+                #   torch.tensor(y)),
+    batch_size=batch,
+    shuffle=shuffle,
+    num_workers=workers,
+    prefetch_factor=prefetch_factor if workers > 0 else None,
+    persistent_workers=persistent_workers,
+    pin_memory=pin_memory,
     drop_last=False)
 
 
 # -------- TRIPLET SAMPLER --------
-
-import torch
-from torch.utils.data import Sampler
-
-
 class TripletBatchSampler(Sampler):
-    """
-    Strict diversity per batch (grid):
-        - choose n_subjects distinct subjects
-        - use all n_classes classes (assumed labels in [0..n_classes-1])
-        - take n_samples per (class, subject) cell
-
-    Usage policy:
-        - consume each cell sequentially without replacement as much as possible
-        - never toss leftovers
-        - when a cell is exhausted, reuse by sampling within that cell (random start / replacement)
-        - epoch length is large (based on total N / batch_size), not min-cell limited
-
-    Requirements:
-        - labels are integers in [0..n_classes-1]
-        - subjects are integers (any range); they are remapped to 0..S-1 internally
-        - every subject has every class (your guarantee)
-    """
-
     def __init__(
         self,
         labels,
@@ -89,7 +86,7 @@ class TripletBatchSampler(Sampler):
         *,
         seed_offset=0,
         reuse_mode="random_start",  # "random_start" or "replacement"
-    ):
+):
         self.labels = torch.as_tensor(labels, dtype=torch.long)
         self.subjects_raw = torch.as_tensor(subjects, dtype=torch.long)
 
@@ -224,10 +221,10 @@ class TripletBatchSampler(Sampler):
             batches += 1
 
 
-
 def create_triplet_loader(x, y, subjects, 
-                          batch=BATCH_SIZE, workers=WORKERS, 
-                          n_classes=CLASSES, n_subjects=20):
+                        batch=BATCH_SIZE, n_classes=CLASSES, 
+                        n_subjects=20, persistent_workers=PRESIST_WORKER,
+                        pin_memory=PIN_MEMORY, workers=WORKERS):
     sampler = TripletBatchSampler(y, subjects, batch, n_classes, n_subjects)
     return DataLoader(
         TensorDataset(torch.from_numpy(x), 
@@ -235,7 +232,8 @@ def create_triplet_loader(x, y, subjects,
                       torch.from_numpy(subjects)),
         batch_sampler=sampler,
         num_workers=workers,
-        pin_memory=PIN_MEMORY)
+        persistent_workers=persistent_workers,
+        pin_memory=pin_memory)
 
 
 # ======== TRAINING & VALIDATING ========
@@ -314,6 +312,117 @@ def train(model, train_loader, val_loader, name,
 
         pbar.set_postfix(
             loss=f"{total_loss.item() / max(1, len(train_loader)):10.6f}",
+            acc=f"{correct.item() / max(1, total):6.4f}",
+            val_loss=f"{val_loss:10.6f}",
+            val_acc=f"{val_acc:6.4f}",
+            LR=f"{opt.param_groups[0]['lr']:8.6f}",
+            wait=f"{wait:3.0f}")
+        pbar.close()
+
+        if save_chkp:
+            checkpoint = {'epoch': ep,
+                        'model_state_dict': model.state_dict()}
+            torch.save(checkpoint, f"{CHECKPOINT_PATH}/{name}/chkp_{ep:03d}.pt")
+
+    model.load_state_dict(best_state)
+    return model
+
+
+def train_grl(model, train_loader, val_loader, name,
+            loss_fn=nn.CrossEntropyLoss(),
+            loss_fn_grl=None,
+            grl_weight=1.0, ramp_epochs=20,
+            epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
+            lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, 
+            patience=PATIENCE, device=DEVICE,
+            verbose=VERBOSE, save_chkp=False):
+
+    model.to(device)
+    opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)
+    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        opt, mode="min", factor=lr_factor, patience=lr_patience, min_lr=min_lr)
+    scaler = GradScaler(enabled=(device=="cuda"))
+
+    max_steps = ramp_epochs * len(train_loader)
+    global_steps = 0
+    best_val = 1e9
+    best_state = {k: v.clone().cpu() for k, v in model.state_dict().items()}
+    wait = 0
+
+    if save_chkp:
+        os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)
+        os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
+
+    for ep in range(1, epochs + 1):
+        model.train()
+        total_loss = torch.tensor(0.0, device=device)
+        c_loss = torch.tensor(0.0, device=device)
+        grl_loss = torch.tensor(0.0, device=device)
+        correct = torch.tensor(0.0, device=device)
+        total = 0
+        step = 0
+        pbar = tqdm(total=len(train_loader), desc=f"{name} | Ep {ep}", 
+                    leave=True, dynamic_ncols=True, disable=not verbose)
+
+        for xb, yb, ysb in train_loader:
+            p = global_steps / max_steps
+            lmbd = 2.0 / (1.0 + math.exp(-10.0 * p)) - 1.0
+            model.grl.lambd = lmbd
+
+            xb = xb.to(device, non_blocking=True)
+            yb = yb.to(device, non_blocking=True)
+            ysb = ysb.to(device, non_blocking=True)
+
+            opt.zero_grad(set_to_none=True)
+            with autocast(device_type="cuda", enabled=(device=="cuda")):
+                logits, logits_grl = model(xb, return_grl=True)
+                loss_c = loss_fn(logits, yb)
+                loss_grl = loss_fn_grl(logits_grl, ysb)
+                loss = loss_c + grl_weight * loss_grl
+
+            scaler.scale(loss).backward()
+            scaler.step(opt)
+            scaler.update()
+
+            total_loss += loss.detach()
+            c_loss += loss_c.detach()
+            grl_loss += loss_grl.detach()
+            correct += (logits.argmax(1) == yb).sum()
+            total += yb.numel()
+            step += 1
+            global_steps += 1
+
+            if not(step % UPDATE_EVERY):
+                pbar.update(UPDATE_EVERY)
+                pbar.set_postfix(
+                    loss=f"{total_loss.item() / step:10.8f}",
+                    c_loss=f"{c_loss.item() / step:10.8f}",
+                    grl_loss=f"{grl_loss.item() / step:10.8f}",
+                    acc=f"{correct.item() / max(1, total):6.4f}",
+                    LR=f"{opt.param_groups[0]['lr']:8.6f}")
+
+        if step % UPDATE_EVERY:
+            pbar.update(step % UPDATE_EVERY)
+
+        val_acc, val_loss = evaluate(model, val_loader, loss_fn, device)
+        sch.step(val_loss)
+
+        if val_loss < best_val:
+            best_val = val_loss
+            best_state = {k: v.clone().cpu() for k, v in model.state_dict().items()}
+            wait = 0
+        else:
+            wait += 1
+            if wait >= patience:
+                if verbose:
+                    tqdm.write(f"{name} | Early stop")
+                pbar.close()
+                break
+
+        pbar.set_postfix(
+            loss=f"{total_loss.item() / max(1, len(train_loader)):10.6f}",
+            c_loss=f"{c_loss.item() / max(1, len(train_loader)):10.8f}",
+            grl_loss=f"{grl_loss.item() / max(1, len(train_loader)):10.8f}",
             acc=f"{correct.item() / max(1, total):6.4f}",
             val_loss=f"{val_loss:10.6f}",
             val_acc=f"{val_acc:6.4f}",
@@ -745,8 +854,6 @@ def eval_within(model, loader, meta, name,
     model.to(device)
     model.eval()
     results = {}
-    os.makedirs(f"{FIGURE_PATH}", exist_ok=True)
-    os.makedirs(f"{FIGURE_PATH}/{name}/", exist_ok=True)
 
     def run(loader, meta):
         N = len(loader.dataset)

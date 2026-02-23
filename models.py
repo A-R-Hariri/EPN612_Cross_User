@@ -1,12 +1,32 @@
 import torch
 import torch.nn as nn; 
 import torch.nn.functional as F
+from torch.autograd import Function
 
 from utils import *
 
 
-# ======== MODELS ========
+# ======== GRL ========
+class _GRLFn(Function):
+    @staticmethod
+    def forward(ctx, x, lambd: float):
+        ctx.lambd = float(lambd)
+        return x.view_as(x)
 
+    @staticmethod
+    def backward(ctx, grad_output):
+        return -ctx.lambd * grad_output, None
+
+
+class GRL(nn.Module):
+    def __init__(self, lambd: float = 1.0):
+        super().__init__()
+        self.lambd = float(lambd)
+
+    def forward(self, x):
+        return _GRLFn.apply(x, self.lambd)
+    
+# ======== MODELS ========
 class CNN(nn.Module):
     def __init__(self, ch=CH, seq=SEQ, emb_dim=128, 
                  num_classes=CLASSES, dropout=DROPOUT):
@@ -76,6 +96,77 @@ class CNN(nn.Module):
         return logits
     
 
+class CNN_GRL(nn.Module):
+    def __init__(self, ch=CH, seq=SEQ, emb_dim=128, 
+                 num_classes=CLASSES, num_grl=306,
+                 lambd=1.0, dropout=DROPOUT):
+        super().__init__()
+        self.emb_dim = emb_dim
+        self.dropout = dropout
+
+        self.conv1 = nn.Conv1d(ch, 32, 8, dilation=1, padding="same")
+        self.conv2 = nn.Conv1d(ch, 32, 8, dilation=2, padding="same")
+        self.conv3 = nn.Conv1d(ch, 32, 8, dilation=4, padding="same")
+        self.conv4 = nn.Conv1d(96, 128, 4, dilation=1, padding="same")
+
+        self.pool = nn.AdaptiveAvgPool1d(1)
+        
+        self.fc1 = nn.Linear(128, 128)
+        self.fc_emb = nn.Linear(128, emb_dim)
+
+        self.drop = nn.Dropout(self.dropout)
+        self.relu = nn.ReLU()
+        self.gelu = nn.GELU()
+
+        self.classifier = nn.Linear(self.emb_dim, 
+                                    num_classes)
+        
+        self.grl = GRL(lambd=lambd)
+        self.classifier_grl = nn.Linear(self.emb_dim, 
+                                        num_grl)
+
+        self.apply(self._init)
+
+    def _init(self, m):
+        if isinstance(m, (nn.Conv1d, nn.Linear)):
+            nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+
+    def forward(self, x, return_emb=False, 
+                return_logits=False, return_grl=False):
+        x /= 128
+
+        x1 = self.relu(self.conv1(x))
+        x1 = self.drop(x1)
+        x2 = self.relu(self.conv2(x))
+        x2 = self.drop(x2)
+        x3 = self.relu(self.conv3(x))
+        x3 = self.drop(x3)
+        x = torch.cat((x1, x2, x3), 1)
+        x = self.relu(self.conv4(x))
+        x = self.drop(x)
+
+        x = self.pool(x).squeeze(-1)
+        # x = x.flatten(1)
+
+        x = self.fc1(x)
+        x = self.gelu(x)
+        emb = self.fc_emb(x)
+
+        logits = self.classifier(emb)
+        logits_grl = self.classifier_grl(self.grl(emb))
+
+        if return_grl:
+            logits = (logits, logits_grl)
+
+        if return_emb and return_logits:
+            return emb, logits
+        if return_emb:
+            return emb
+        return logits
+    
+
 # ======== LOSSES ========
 class RestLoss(nn.Module):
     def __init__(self, alpha1=0.25, alpha2=0.5, weight=None):
@@ -114,64 +205,6 @@ class EqLoss(nn.Module):
         # Select top-k highest losses
         topk_loss, _ = torch.topk(ce, k=k, largest=True)
         return topk_loss.mean()
-        
-
-# class EqLoss(nn.Module):
-#     def __init__(self, alpha=2.0, weight=None, eps=1e-6, clamp_std=5):
-#         super().__init__()
-#         self.ce = nn.CrossEntropyLoss(reduction="none", weight=weight)
-#         self.alpha = float(alpha)
-#         self.eps = float(eps)
-#         self.clamp_std = clamp_std  # e.g. 5.0 or None
-
-#     def forward(self, logits, targets):
-#         l = self.ce(logits, targets)
-
-#         # force stable stats (important under AMP)
-#         l32 = l.float()
-#         var = l32.var(unbiased=False)  # match TF/Keras population variance
-#         std = torch.sqrt(var + self.eps)
-
-#         if self.clamp_std is not None:
-#             std = std.clamp(max=self.clamp_std)
-
-#         return l32.mean() + self.alpha * std
-    
-
-# class AwareLoss(nn.Module):
-#     def __init__(self, alpha_std=1.0, alpha_below=1.0, weight=None):
-#         super().__init__()
-#         self.ce = nn.CrossEntropyLoss(reduction="none", weight=weight)
-#         self.alpha_std = alpha_std
-#         self.alpha_below = alpha_below
-
-#     def forward(self, logits, targets):
-#         l = self.ce(logits, targets)
-#         l_mean = l.mean()
-#         l_std = l.std(unbiased=False)              # non-detached, contributes to gradients
-#         below_mask = (l < l_mean).float()
-#         below_penalty = self.alpha_below * (l_mean - l) * below_mask  # proportional penalty
-#         l_scaled = l + below_penalty
-#         loss = l_scaled.mean()
-#         return loss
-
-
-# class AwareEqLoss(nn.Module):
-#     def __init__(self, alpha_std=1.0, alpha_below=1.0, weight=None):
-#         super().__init__()
-#         self.ce = nn.CrossEntropyLoss(reduction="none", weight=weight)
-#         self.alpha_std = alpha_std
-#         self.alpha_below = alpha_below
-
-#     def forward(self, logits, targets):
-#         l = self.ce(logits, targets)
-#         l_mean = l.mean()
-#         l_std = l.std(unbiased=False)              # non-detached, contributes to gradients
-#         below_mask = (l < l_mean).float()
-#         below_penalty = self.alpha_below * (l_mean - l) * below_mask  # proportional penalty
-#         l_scaled = l + below_penalty
-#         loss = (l_scaled.mean() + self.alpha_std * l_std) / (1 + self.alpha_std)
-#         return loss
 
 
 class TripletLoss(nn.Module):
