@@ -1,7 +1,7 @@
 import warnings, sys, os, gc
 from os.path import join
 warnings.filterwarnings("ignore")
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1] if len(sys.argv) > 1 else "0"
 
 import torch; print(torch.cuda.is_available())
 
@@ -87,6 +87,10 @@ for d, r in enumerate(ranges):
                             meta=test_meta)
         results.append(_result)
         print(_result['acc_mean'])
+
+        del train_loader, val_loader, test_loader, model
+        torch.cuda.empty_cache()
+        gc.collect()
 
 os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)
 os.makedirs(f"{CHECKPOINT_PATH}/{NAME}/", exist_ok=True)
