@@ -99,15 +99,16 @@ class RestLoss(nn.Module):
     
 
 class EqLoss(nn.Module):
-    def __init__(self, alpha=0.3, reduction='mean'):
+    def __init__(self, alpha=0.3, weight=None):
         super().__init__()
         assert 0 < alpha <= 1, "alpha must be in (0, 1]"
         self.alpha = alpha
-        self.reduction = reduction
+        self.ce = nn.CrossEntropyLoss(reduction='none', 
+                                      weight=weight)
 
     def forward(self, logits, targets):
         # Per-sample cross entropy
-        ce = F.cross_entropy(logits, targets, reduction='none')
+        ce = self.ce(logits, targets)
         batch_size = ce.size(0)
         k = max(1, int(self.alpha * batch_size))
         # Select top-k highest losses
