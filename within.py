@@ -17,9 +17,14 @@ import matplotlib.pyplot as plt
 from utils import *
 from models import *
 
+
+WORKERS = 0; PRE_FETCH = 2; VERBOSE=False
+PRESIST_WORKER = False; PIN_MEMORY = True
+
 SEED = 13; random.seed(SEED); np.random.seed(SEED)
 GENERATOR = torch.manual_seed(SEED)
 MMAP_MODE = 'r'; SAVE_CHKP = False
+
 
 # ======== LOAD DATA ========
 train_data = np.load(join(PICKLE_PATH, 'train_data.npy'), allow_pickle=True).item()
@@ -63,11 +68,14 @@ for d, r in enumerate(ranges):
                                         device=DEVICE)
 
         train_loader = create_loader(train_windows, train_meta['classes'], 
-                                    batch=BATCH_SIZE, shuffle=True)
+                                    batch=BATCH_SIZE, shuffle=True, 
+                                    workers=WORKERS, persistent_workers=PRESIST_WORKER)
         val_loader = create_loader(val_windows, val_meta['classes'], 
-                                    batch=BATCH_SIZE, shuffle=False)
+                                    batch=BATCH_SIZE, shuffle=False, 
+                                    workers=WORKERS, persistent_workers=PRESIST_WORKER)
         test_loader = create_loader(test_windows, test_meta['classes'], 
-                                    batch=BATCH_SIZE, shuffle=False)
+                                    batch=BATCH_SIZE, shuffle=False, 
+                                    workers=WORKERS, persistent_workers=PRESIST_WORKER)
 
         model = CNN()
         weights = torch.tensor(compute_class_weight('balanced', 
@@ -79,7 +87,7 @@ for d, r in enumerate(ranges):
             train_loader=train_loader,
             val_loader=val_loader, 
             loss_fn=nn.CrossEntropyLoss(weight=weights),
-            save_chkp=SAVE_CHKP, verbose=False)
+            save_chkp=SAVE_CHKP, verbose=VERBOSE)
         _result = eval_within(model=model, name=NAME, 
                             loader=test_loader,
                             meta=test_meta)

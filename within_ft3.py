@@ -52,7 +52,7 @@ for d, r in enumerate(ranges):
 
         data_s = data_list[d].isolate_data("subjects", [i], fast=True)
 
-        data = data_s.isolate_data("reps", list(range(15)), fast=True)
+        data = data_s.isolate_data("reps", list(range(3)), fast=True)
         train_windows, train_meta = data.parse_windows(SEQ, INC)
 
         data = data_s.isolate_data("reps", list(range(15, 20)), fast=True)

@@ -40,7 +40,7 @@ test_meta = np.load(join(PICKLE_PATH, 'test_meta.npy'), allow_pickle=True).item(
 
 
 # Within
-NAME = 'cnn_raw_within_ft'
+NAME = 'cnn_raw_within_lim'
 results = []
 
 ranges = [(0, 306), (306, 332), (332, 612)]
@@ -52,7 +52,7 @@ for d, r in enumerate(ranges):
 
         data_s = data_list[d].isolate_data("subjects", [i], fast=True)
 
-        data = data_s.isolate_data("reps", list(range(15)), fast=True)
+        data = data_s.isolate_data("reps", list(range(3)), fast=True)
         train_windows, train_meta = data.parse_windows(SEQ, INC)
 
         data = data_s.isolate_data("reps", list(range(15, 20)), fast=True)
@@ -78,7 +78,6 @@ for d, r in enumerate(ranges):
                                     workers=WORKERS, persistent_workers=PRESIST_WORKER)
 
         model = CNN()
-        model.load_state_dict(torch.load(join(CHECKPOINT_PATH, "cnn_raw", "cnn_raw.pt")))
         weights = torch.tensor(compute_class_weight('balanced', 
                                     classes=np.arange(CLASSES), 
                                         y=train_meta['classes']),
