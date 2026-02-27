@@ -8,6 +8,7 @@ import torch.nn as nn; import torch.nn.functional as F
 from torch.optim import Adam
 from torch.amp import GradScaler, autocast
 from torch.utils.data import (DataLoader, TensorDataset, Sampler)
+from torch.nn.utils import clip_grad_norm_
 
 def is_notebook():
     try:
@@ -25,7 +26,7 @@ DTYPE = np.float32
 PICKLE_PATH = 'pickles'; CHECKPOINT_PATH = 'checkpoints'; FIGURE_PATH = 'figures'
 SEQ = 40; INC = 2; CH = 8; CLASSES = 5; VAL_CUTOFF = 332
 WORKERS = 4; PRE_FETCH = 2; VERBOSE=True; DEVICE = 'cuda'
-UPDATE_EVERY = 50; PRESIST_WORKER = False; PIN_MEMORY = True
+UPDATE_EVERY = 50; PRESIST_WORKER = True; PIN_MEMORY = True
 
 EPOCHS = 200; BATCH_SIZE = 512; DROPOUT = 0.2; PATIENCE = 10
 LR_FACTOR = 0.6; LR_PATIENCE = 4; LR_INIT = 1e-4; LR_MIN = 1e-5
@@ -331,7 +332,7 @@ def train(model, train_loader, val_loader, name,
 def train_grl(model, train_loader, val_loader, name,
             loss_fn=nn.CrossEntropyLoss(),
             loss_fn_grl=None,
-            grl_weight=1.0, ramp_epochs=20,
+            grl_weight=1.0, ramp_epochs=50,
             epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
             lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, 
             patience=PATIENCE, device=DEVICE,
@@ -343,7 +344,7 @@ def train_grl(model, train_loader, val_loader, name,
         opt, mode="min", factor=lr_factor, patience=lr_patience, min_lr=min_lr)
     scaler = GradScaler(enabled=(device=="cuda"))
 
-    max_steps = ramp_epochs * len(train_loader)
+    max_steps = max(1, ramp_epochs * len(train_loader))
     global_steps = 0
     best_val = 1e9
     best_state = {k: v.clone().cpu() for k, v in model.state_dict().items()}
@@ -366,8 +367,8 @@ def train_grl(model, train_loader, val_loader, name,
 
         for xb, yb, ysb in train_loader:
             p = global_steps / max_steps
-            lmbd = 2.0 / (1.0 + math.exp(-10.0 * p)) - 1.0
-            model.grl.lambd = lmbd
+            lmbd = np.clip(p, 0, 1)
+            model.grl.lambd = float(lmbd)
 
             xb = xb.to(device, non_blocking=True)
             yb = yb.to(device, non_blocking=True)
@@ -381,6 +382,7 @@ def train_grl(model, train_loader, val_loader, name,
                 loss = loss_c + grl_weight * loss_grl
 
             scaler.scale(loss).backward()
+            clip_grad_norm_(model.parameters(), 1.0)
             scaler.step(opt)
             scaler.update()
 
