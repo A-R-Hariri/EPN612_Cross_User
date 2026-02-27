@@ -68,7 +68,7 @@ class CNN(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def forward(self, x, return_emb=False, return_logits=False):
-        x = x /128.0
+        x = x / 128.0
 
         x1 = self.relu(self.conv1(x))
         x1 = self.drop(x1)
@@ -135,7 +135,7 @@ class CNN_GRL(nn.Module):
 
     def forward(self, x, return_emb=False, 
                 return_logits=False, return_grl=False):
-        x = x /128.0
+        x = x / 128.0
 
         x1 = self.relu(self.conv1(x))
         x1 = self.drop(x1)
