@@ -18,7 +18,7 @@ from utils import *
 from models import *
 
 
-WORKERS = 0; PRE_FETCH = 2; VERBOSE=False
+WORKERS = 0; PRE_FETCH = 2; VERBOSE=False; BATCH_SIZE=128
 PRESIST_WORKER = False; PIN_MEMORY = True
 
 SEED = 13; random.seed(SEED); np.random.seed(SEED)
@@ -40,7 +40,8 @@ test_meta = np.load(join(PICKLE_PATH, 'test_meta.npy'), allow_pickle=True).item(
 
 
 # Within
-NAME = 'cnn_raw_within'
+REPS = int(sys.argv[2]) if len(sys.argv) > 2 else 15
+NAME = f'cnn_raw_within_{REPS}'
 results = []
 
 ranges = [(0, 306), (306, 332), (332, 612)]
@@ -52,7 +53,7 @@ for d, r in enumerate(ranges):
 
         data_s = data_list[d].isolate_data("subjects", [i], fast=True)
 
-        data = data_s.isolate_data("reps", list(range(15)), fast=True)
+        data = data_s.isolate_data("reps", list(range(REPS)), fast=True)
         train_windows, train_meta = data.parse_windows(SEQ, INC)
 
         data = data_s.isolate_data("reps", list(range(15, 20)), fast=True)
@@ -85,7 +86,7 @@ for d, r in enumerate(ranges):
                                         device=DEVICE)
         train(model=model, name=NAME, 
             train_loader=train_loader,
-            val_loader=val_loader, 
+            val_loader=val_loader,
             loss_fn=nn.CrossEntropyLoss(weight=weights),
             save_chkp=SAVE_CHKP, verbose=VERBOSE)
         _result = eval_within(model=model, name=NAME, 
