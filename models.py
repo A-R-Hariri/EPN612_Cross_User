@@ -68,7 +68,7 @@ class CNN(nn.Module):
                 nn.init.zeros_(m.bias)
 
     def forward(self, x, return_emb=False, return_logits=False):
-        x /= 128
+        x = x /128.0
 
         x1 = self.relu(self.conv1(x))
         x1 = self.drop(x1)
@@ -135,7 +135,7 @@ class CNN_GRL(nn.Module):
 
     def forward(self, x, return_emb=False, 
                 return_logits=False, return_grl=False):
-        x /= 128
+        x = x /128.0
 
         x1 = self.relu(self.conv1(x))
         x1 = self.drop(x1)
@@ -190,6 +190,22 @@ class RestLoss(nn.Module):
     
 
 class EqLoss(nn.Module):
+    def __init__(self, alpha=0.3, eps=1e-8, weight=None):
+        super().__init__()
+        self.alpha = alpha
+        self.eps = eps
+        self.ce = nn.CrossEntropyLoss(reduction='none', 
+                                      weight=weight)
+        
+    def forward(self, logits, targets):
+        l = self.ce(logits, targets)
+        mean = l.mean()
+        var = l.var(unbiased=False)
+        equity = var / (mean.detach()**2 + self.eps)
+        return mean + self.alpha * equity
+    
+
+class CVaRLoss(nn.Module):
     def __init__(self, alpha=0.3, weight=None):
         super().__init__()
         assert 0 < alpha <= 1, "alpha must be in (0, 1]"
