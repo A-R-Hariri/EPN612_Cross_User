@@ -1,7 +1,7 @@
 import warnings, sys, os, gc
 from os.path import join
 warnings.filterwarnings("ignore")
-os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1] if len(sys.argv) > 1 else "0"
 
 import torch; print(torch.cuda.is_available())
 
@@ -16,6 +16,9 @@ import matplotlib.pyplot as plt
 
 from utils import *
 from models import *
+
+
+BATCH_SIZE = 4096
 
 SEED = 13; random.seed(SEED); np.random.seed(SEED)
 GENERATOR = torch.manual_seed(SEED)
@@ -40,7 +43,6 @@ test_windows_relabeled = np.load(join(PICKLE_PATH, 'test_windows_relabeled.npy')
 test_meta_relabeled = np.load(join(PICKLE_PATH, 'test_meta_relabeled.npy'), allow_pickle=True).item()
 
 # ======== PIPELINE ========
-
 train_loader = create_triplet_loader(
     train_windows, train_meta['classes'], train_meta['subjects'],
     batch=BATCH_SIZE, n_classes=5, n_subjects=2)
@@ -57,26 +59,48 @@ test_loader_relabeled = create_loader(test_windows_relabeled,
                             test_meta_relabeled['classes'],
                             batch=BATCH_SIZE, shuffle=False)
 
-
-NAME = "cnn_triplet"
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
 weights = torch.tensor(compute_class_weight('balanced', 
                                classes=np.arange(CLASSES), 
                                 y=train_meta['classes']),
                                 dtype=torch.float32,
                                 device=DEVICE)
+
+
+NAME = "cnn_triplet"
+model = CNN()
+print(model, f"\nParameters count: {count_params(model):,}")
 train_triplet(model=model, name=NAME, 
       train_loader=train_loader,
       val_loader=val_loader_triplet, 
-      criterion_ce=nn.CrossEntropyLoss(weights),
+      criterion_ce=nn.CrossEntropyLoss(weight=weights),
       criterion_tri=TripletLoss(),
       tr_phase1=0.95, ce_phase1=0.05,
       tr_phase2=0.5, ce_phase2=1.0,
       epochs_phase1=0, save_chkp=SAVE_CHKP)
-
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, "f{NAME}.pt")))
+# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+eval_test(model=model, name=NAME, 
+          loaders={'raw': test_loader, 
+                   'segmented': test_loader_segmented, 
+                   'relabeled': test_loader_relabeled},
+           metas={'raw': test_meta, 
+                  'segmented': test_meta_segmented, 
+                  'relabeled': test_meta_relabeled})
+
+
+NAME = "cnn_triplet_nw"
+model = CNN()
+print(model, f"\nParameters count: {count_params(model):,}")
+train_triplet(model=model, name=NAME, 
+      train_loader=train_loader,
+      val_loader=val_loader_triplet, 
+      criterion_ce=nn.CrossEntropyLoss(weight=None),
+      criterion_tri=TripletLoss(),
+      tr_phase1=0.95, ce_phase1=0.05,
+      tr_phase2=0.5, ce_phase2=1.0,
+      epochs_phase1=0, save_chkp=SAVE_CHKP)
+torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
 eval_test(model=model, name=NAME, 
           loaders={'raw': test_loader, 
                    'segmented': test_loader_segmented, 
