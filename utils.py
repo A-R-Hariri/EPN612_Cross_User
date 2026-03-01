@@ -468,10 +468,16 @@ def train_triplet(model, train_loader, val_loader, name,
     current_alpha = tr_phase1
     current_ce_w = ce_phase1
 
-    for ep in range(1, epochs + 1):
+    ep = 1
+    while ep <= epochs:
         # Phase Switching Logic
         if ep > epochs_phase1 and phase == 1:
             print(f"\n{name} | PHASE 2 START: Joint Optimization")
+            ep = 1                                      # Reset episodes
+            opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)
+            sch = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                opt, mode="min", factor=lr_factor, patience=lr_patience, min_lr=min_lr)
+            scaler = GradScaler(enabled=(device=="cuda"))
             phase = 2
             current_alpha = tr_phase2
             current_ce_w = ce_phase2
@@ -505,6 +511,7 @@ def train_triplet(model, train_loader, val_loader, name,
                 loss = (current_ce_w * loss_ce) + (current_alpha * loss_tri)
 
             scaler.scale(loss).backward()
+            clip_grad_norm_(model.parameters(), 1.0)
             scaler.step(opt)
             scaler.update()
 
@@ -527,14 +534,10 @@ def train_triplet(model, train_loader, val_loader, name,
         if step % UPDATE_EVERY:
             pbar.update(step % UPDATE_EVERY)
 
-        # Validation with Triplet Calculation
         val_acc, val_loss_ce, val_loss_tri = evaluate_triplet(
             model, val_loader, criterion_ce, device, 
             triplet_fn=criterion_tri, alpha=current_alpha)
-        
-        # Stop on Triplet Loss in Phase 1, Total Loss in Phase 2
         monitor_metric = (current_ce_w * val_loss_ce) + (current_alpha * val_loss_tri)
-        
         sch.step(monitor_metric)
 
         if monitor_metric < best_val_metric:
@@ -546,6 +549,11 @@ def train_triplet(model, train_loader, val_loader, name,
             if wait >= patience:
                 if phase == 1:
                      # Force Phase 2 transition if stuck in Phase 1
+                    ep = 1                                      # Reset episodes
+                    opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)
+                    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                        opt, mode="min", factor=lr_factor, patience=lr_patience, min_lr=min_lr)
+                    scaler = GradScaler(enabled=(device=="cuda"))
                     tqdm.write(f"{name} | Phase 1 Stalled. Forcing Phase 2.")
                     phase = 2
                     current_alpha = tr_phase2
@@ -573,6 +581,8 @@ def train_triplet(model, train_loader, val_loader, name,
             checkpoint = {'epoch': ep,
                           'model_state_dict': model.state_dict()}
             torch.save(checkpoint, f"{CHECKPOINT_PATH}/{name}/chkp_{ep:03d}.pt")
+
+        ep += 1
 
     model.load_state_dict(best_state)
     return model

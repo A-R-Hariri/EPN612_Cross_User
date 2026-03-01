@@ -237,7 +237,7 @@ class TripletLoss(nn.Module):
         )
 
     def _batch_hard(self, z, pos_mask, neg_mask):
-        dist = torch.cdist(z, z, p=2)
+        dist = 1 - torch.matmul(z, z.T)
 
         pos_dist = dist.masked_fill(~pos_mask, float("-inf"))
         neg_dist = dist.masked_fill(~neg_mask, float("inf"))
@@ -274,7 +274,7 @@ class TripletLoss(nn.Module):
         pos_hard = same_class & diff_subj & ~eye
         neg_hard = diff_class & same_subj & ~eye
 
-        loss = 0.0
+        loss = torch.tensor(0.0, device=z.device)
         denom = 0
 
         if self.w_hard != 0:
