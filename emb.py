@@ -74,8 +74,8 @@ train_triplet(model=model, name=NAME,
       val_loader=val_loader_triplet, 
       criterion_ce=nn.CrossEntropyLoss(weight=weights),
       criterion_tri=TripletLoss(),
-      tr_phase1=0.05, ce_phase1=1.0,
-      tr_phase2=0.5, ce_phase2=1.0,
+      tr_phase1=0.0, ce_phase1=1.0,
+      tr_phase2=0.1, ce_phase2=0.9,
       epochs_phase1=5, save_chkp=SAVE_CHKP)
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
 # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
@@ -96,8 +96,8 @@ train_triplet(model=model, name=NAME,
       val_loader=val_loader_triplet, 
       criterion_ce=nn.CrossEntropyLoss(weight=None),
       criterion_tri=TripletLoss(),
-      tr_phase1=0.05, ce_phase1=1.0,
-      tr_phase2=0.5, ce_phase2=1.0,
+      tr_phase1=0.0, ce_phase1=1.0,
+      tr_phase2=0.1, ce_phase2=0.9,
       epochs_phase1=5, save_chkp=SAVE_CHKP)
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
 # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
