@@ -6,6 +6,56 @@ from torch.autograd import Function
 from utils import *
 
 
+class MLP(nn.Module):
+    def __init__(self, feats, emb_dim=128, proj_dim=128, dropout=DROPOUT):
+        super().__init__()
+
+        self.fc1 = nn.Linear(feats, 512)
+        self.fc2 = nn.Linear(512, 256)
+        self.fc3 = nn.Linear(256, 128)
+        self.fc_emb = nn.Linear(128, 64)
+        self.classifier = nn.Linear(64, CLASSES)  # embedding
+        
+        self.drop = nn.Dropout(dropout)
+        self.relu = nn.ReLU()
+        # self.gelu = nn.GELU()
+        self.norm1 = nn.BatchNorm1d(512)
+        self.norm2 = nn.BatchNorm1d(256)
+        self.norm3 = nn.BatchNorm1d(128)
+
+        self.apply(self._init)
+
+    def _init(self, m):
+        if isinstance(m, (nn.Linear)):
+            nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
+            if m.bias is not None:
+                nn.init.zeros_(m.bias)
+
+    def forward(self, x, return_emb=False, return_logits=False):
+        x = x / 128.0
+
+        x = self.relu(self.fc1(x))
+        x = self.norm1(x)
+        x = self.drop(x)
+
+        x = self.relu(self.fc2(x))
+        x = self.norm2(x)
+        x = self.drop(x)
+
+        x = self.relu(self.fc3(x))
+        x = self.norm3(x)
+        x = self.drop(x)
+
+        emb = self.relu(self.fc_emb(x))
+
+        logits = self.classifier(emb)
+
+        if return_emb and return_logits:
+            return emb, logits
+        if return_emb:
+            return emb
+        return logits
+        
 # ======== GRL ========
 class _GRLFn(Function):
     @staticmethod
@@ -189,19 +239,45 @@ class RestLoss(nn.Module):
         return loss.mean()
     
 
+# class EqLoss(nn.Module):
+#     def __init__(self, alpha=0.3, eps=1e-8, weight=None):
+#         super().__init__()
+#         self.alpha = alpha
+#         self.eps = eps
+#         self.ce = nn.CrossEntropyLoss(reduction='none', 
+#                                       weight=weight)
+        
+#     def forward(self, logits, targets):
+#         l = self.ce(logits, targets)
+#         mean = l.mean()
+#         var = l.var(unbiased=False)
+#         equity = var / (mean.detach()**2 + self.eps)
+#         return mean + self.alpha * equity
+
+
 class EqLoss(nn.Module):
     def __init__(self, alpha=0.3, eps=1e-8, weight=None):
         super().__init__()
         self.alpha = alpha
         self.eps = eps
-        self.ce = nn.CrossEntropyLoss(reduction='none', 
-                                      weight=weight)
-        
+        self.ce = nn.CrossEntropyLoss(reduction="none", weight=weight)
+
     def forward(self, logits, targets):
+
         l = self.ce(logits, targets)
         mean = l.mean()
-        var = l.var(unbiased=False)
-        equity = var / (mean.detach()**2 + self.eps)
+
+        classes = torch.unique(targets)
+        class_means = []
+
+        for c in classes:
+            mask = targets == c
+            class_means.append(l[mask].mean())
+
+        class_means = torch.stack(class_means)
+
+        equity = class_means.var(unbiased=False) / (class_means.mean() + self.eps)
+
         return mean + self.alpha * equity
     
 
