@@ -859,7 +859,7 @@ def eval_test(model, loaders, metas, name,
 
 
 @torch.no_grad()
-def eval_within(model, loader, meta, name,
+def eval_within(model, loader, meta,
                 multi_head=None,
                 device=DEVICE):
 
@@ -911,5 +911,42 @@ def eval_within(model, loader, meta, name,
 
     # Iterate through provided loaders (raw, segmented, relabeled)
     results = run(loader, meta)
+
+    return results
+
+
+@torch.no_grad()
+def eval_within_lda(model, x, meta):
+
+    results = {}
+
+    def run(x, meta):
+        preds = model.predict(x)
+        labels = np.asarray(meta['classes'])
+        ps, ls = preds, labels
+
+        # CA (Classification Accuracy)
+        acc = (ps == ls).mean()
+
+        # AER logic (Active Error Rate / Active Accuracy)
+        act_mask = (ls != 0)
+        if act_mask.any():
+            act_acc = (ps[act_mask] == ls[act_mask]).mean()
+
+        # Vectorized Balanced Accuracy
+        # Efficiently calculates recall for all classes at once
+        cm = confusion_matrix(ls, ps, labels=np.arange(CLASSES))
+        with np.errstate(divide='ignore', invalid='ignore'):
+            per_class = np.diag(cm) / cm.sum(axis=1)
+            bal_acc = np.nanmean(per_class)
+
+        acc, act_acc, bal_acc = acc * 100, act_acc * 100, bal_acc * 100
+
+        return {"acc_mean": acc.mean(),
+                "act_acc_mean": act_acc.mean(),
+                "bal_acc_mean": bal_acc.mean()}
+
+    # Iterate through provided loaders (raw, segmented, relabeled)
+    results = run(x, meta)
 
     return results
