@@ -1,9 +1,9 @@
 import warnings, sys, os, gc
 from os.path import join
 warnings.filterwarnings("ignore")
-os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1] if len(sys.argv) > 1 else "0"
 
-import torch; print(torch.cuda.is_available())
+from sklearn.discriminant_analysis import (
+    LinearDiscriminantAnalysis as LDA)
 
 import libemg
 from libemg.datasets import get_dataset_list
@@ -15,7 +15,6 @@ from sklearn.utils.class_weight import compute_class_weight
 import matplotlib.pyplot as plt
 
 from utils import *
-from models import *
 
 
 WORKERS = 0; PRE_FETCH = 2; VERBOSE=False; BATCH_SIZE=128
@@ -24,6 +23,10 @@ PRESIST_WORKER = False; PIN_MEMORY = True
 SEED = 13; random.seed(SEED); np.random.seed(SEED)
 GENERATOR = torch.manual_seed(SEED)
 MMAP_MODE = 'r'; SAVE_CHKP = False
+
+SAMPLING_RATE = 200
+FEATURE_LIST = ['WENG']
+FEATURE_DIC = {'WENG_fs': SAMPLING_RATE}
 
 
 # ======== LOAD DATA ========
@@ -38,13 +41,12 @@ val_meta = np.load(join(PICKLE_PATH, 'val_meta.npy'), allow_pickle=True).item()
 test_windows = np.load(join(PICKLE_PATH, 'test_windows.npy'), mmap_mode=MMAP_MODE)
 test_meta = np.load(join(PICKLE_PATH, 'test_meta.npy'), allow_pickle=True).item()
 
-
 # Within
-REPS = sys.argv[1].split(',') if len(sys.argv) > 2 else 15
+REPS = sys.argv[1].split(',') if len(sys.argv) > 1 else 15
 REPS = list(map(int, REPS))
 
 for rep in REPS:
-    NAME = f'cnn_raw_within_ft_{rep}'
+    NAME = f'lda_raw_within_{rep}'
     results = []
 
     ranges = [(0, 306), (306, 332), (332, 612)]
@@ -71,36 +73,26 @@ for rep in REPS:
                                             dtype=torch.float32,
                                             device=DEVICE)
 
-            train_loader = create_loader(train_windows, train_meta['classes'], 
-                                        batch=BATCH_SIZE, shuffle=True, 
-                                        workers=WORKERS, persistent_workers=PRESIST_WORKER)
-            val_loader = create_loader(val_windows, val_meta['classes'], 
-                                        batch=BATCH_SIZE, shuffle=False, 
-                                        workers=WORKERS, persistent_workers=PRESIST_WORKER)
-            test_loader = create_loader(test_windows, test_meta['classes'], 
-                                        batch=BATCH_SIZE, shuffle=False, 
-                                        workers=WORKERS, persistent_workers=PRESIST_WORKER)
+            # -------- Features --------
+            feature_extractor = FeatureExtractor()
+            train_windows = feature_extractor.extract_features(FEATURE_LIST, train_windows, array=True,
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+            val_windows = feature_extractor.extract_features(FEATURE_LIST, val_windows, array=True,
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+            test_windows = feature_extractor.extract_features(FEATURE_LIST, test_windows, array=True,
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+            
+            model = LDA()
+            model = model.fit(train_windows.reshape((train_windows.shape[0], -1)),
+                            train_meta['classes'])
 
-            model = CNN()
-            model.load_state_dict(torch.load(join(CHECKPOINT_PATH, "cnn_raw", "cnn_raw.pt")))
-            weights = torch.tensor(compute_class_weight('balanced', 
-                                        classes=np.arange(CLASSES), 
-                                            y=train_meta['classes']),
-                                            dtype=torch.float32,
-                                            device=DEVICE)
-            train(model=model, name=NAME, 
-                train_loader=train_loader,
-                val_loader=val_loader,
-                loss_fn=nn.CrossEntropyLoss(weight=weights),
-                save_chkp=SAVE_CHKP, verbose=VERBOSE)
-            _result = eval_within(model=model,
-                                loader=test_loader,
-                                meta=test_meta)
+            _result = eval_within_lda(model=model,
+                                    x=test_windows.reshape((test_windows.shape[0], -1)),
+                                    meta=test_meta)
             results.append(_result)
             print(_result['acc_mean'])
 
-            del train_loader, val_loader, test_loader, model
-            torch.cuda.empty_cache()
+            del train_windows, val_windows, test_windows, model
             gc.collect()
 
     os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)

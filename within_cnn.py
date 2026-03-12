@@ -44,7 +44,7 @@ REPS = sys.argv[1].split(',') if len(sys.argv) > 2 else 15
 REPS = list(map(int, REPS))
 
 for rep in REPS:
-    NAME = f'cnn_raw_within_ft_{rep}'
+    NAME = f'cnn_raw_within_{rep}'
     results = []
 
     ranges = [(0, 306), (306, 332), (332, 612)]
@@ -82,7 +82,6 @@ for rep in REPS:
                                         workers=WORKERS, persistent_workers=PRESIST_WORKER)
 
             model = CNN()
-            model.load_state_dict(torch.load(join(CHECKPOINT_PATH, "cnn_raw", "cnn_raw.pt")))
             weights = torch.tensor(compute_class_weight('balanced', 
                                         classes=np.arange(CLASSES), 
                                             y=train_meta['classes']),

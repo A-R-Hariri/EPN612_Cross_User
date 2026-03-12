@@ -43,75 +43,78 @@ test_windows = np.load(join(PICKLE_PATH, 'test_windows.npy'), mmap_mode=MMAP_MOD
 test_meta = np.load(join(PICKLE_PATH, 'test_meta.npy'), allow_pickle=True).item()
 
 # Within
-REPS = int(sys.argv[2]) if len(sys.argv) > 2 else 15
-NAME = f'mlp_raw_within_{REPS}'
-results = []
+REPS = sys.argv[1].split(',') if len(sys.argv) > 2 else 15
+REPS = list(map(int, REPS))
 
-ranges = [(0, 306), (306, 332), (332, 612)]
-data_list = [train_data, val_data, test_data]
+for rep in REPS:
+    NAME = f'mlp_raw_within_{rep}'
+    results = []
 
-for d, r in enumerate(ranges):
-    for i in range(*r):
-        print(i)
+    ranges = [(0, 306), (306, 332), (332, 612)]
+    data_list = [train_data, val_data, test_data]
 
-        data_s = data_list[d].isolate_data("subjects", [i], fast=True)
+    for d, r in enumerate(ranges):
+        for i in range(*r):
+            print(i)
 
-        data = data_s.isolate_data("reps", list(range(REPS)), fast=True)
-        train_windows, train_meta = data.parse_windows(SEQ, INC)
+            data_s = data_list[d].isolate_data("subjects", [i], fast=True)
 
-        data = data_s.isolate_data("reps", list(range(15, 20)), fast=True)
-        val_windows, val_meta = data.parse_windows(SEQ, INC)
+            data = data_s.isolate_data("reps", list(range(rep)), fast=True)
+            train_windows, train_meta = data.parse_windows(SEQ, INC)
 
-        data = data_s.isolate_data("reps", list(range(20, 25)), fast=True)
-        test_windows, test_meta = data.parse_windows(SEQ, INC)
+            data = data_s.isolate_data("reps", list(range(15, 20)), fast=True)
+            val_windows, val_meta = data.parse_windows(SEQ, INC)
 
-        weights = torch.tensor(compute_class_weight('balanced', 
-                                    classes=np.arange(CLASSES), 
-                                        y=train_meta['classes']),
-                                        dtype=torch.float32,
-                                        device=DEVICE)
+            data = data_s.isolate_data("reps", list(range(20, 25)), fast=True)
+            test_windows, test_meta = data.parse_windows(SEQ, INC)
 
-        # -------- Features --------
-        feature_extractor = FeatureExtractor()
-        train_windows = feature_extractor.extract_features(FEATURE_LIST, train_windows, array=True,
-                                    fix_feature_errors=False, feature_dic=FEATURE_DIC)
-        val_windows = feature_extractor.extract_features(FEATURE_LIST, val_windows, array=True,
-                                    fix_feature_errors=False, feature_dic=FEATURE_DIC)
-        test_windows = feature_extractor.extract_features(FEATURE_LIST, test_windows, array=True,
-                                    fix_feature_errors=False, feature_dic=FEATURE_DIC)
-        n_features = train_windows.shape[1]
+            weights = torch.tensor(compute_class_weight('balanced', 
+                                        classes=np.arange(CLASSES), 
+                                            y=train_meta['classes']),
+                                            dtype=torch.float32,
+                                            device=DEVICE)
 
-        train_loader = create_loader(train_windows, train_meta['classes'], 
-                                    batch=BATCH_SIZE, shuffle=True, 
-                                    workers=WORKERS, persistent_workers=PRESIST_WORKER)
-        val_loader = create_loader(val_windows, val_meta['classes'], 
-                                    batch=BATCH_SIZE, shuffle=False, 
-                                    workers=WORKERS, persistent_workers=PRESIST_WORKER)
-        test_loader = create_loader(test_windows, test_meta['classes'], 
-                                    batch=BATCH_SIZE, shuffle=False, 
-                                    workers=WORKERS, persistent_workers=PRESIST_WORKER)
+            # -------- Features --------
+            feature_extractor = FeatureExtractor()
+            train_windows = feature_extractor.extract_features(FEATURE_LIST, train_windows, array=True,
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+            val_windows = feature_extractor.extract_features(FEATURE_LIST, val_windows, array=True,
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+            test_windows = feature_extractor.extract_features(FEATURE_LIST, test_windows, array=True,
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+            n_features = train_windows.shape[1]
 
-        model = MLP(n_features)
-        weights = torch.tensor(compute_class_weight('balanced', 
-                                    classes=np.arange(CLASSES), 
-                                        y=train_meta['classes']),
-                                        dtype=torch.float32,
-                                        device=DEVICE)
-        train(model=model, name=NAME, 
-            train_loader=train_loader,
-            val_loader=val_loader,
-            loss_fn=nn.CrossEntropyLoss(weight=weights),
-            save_chkp=SAVE_CHKP, verbose=VERBOSE)
-        _result = eval_within(model=model, name=NAME, 
-                            loader=test_loader,
-                            meta=test_meta)
-        results.append(_result)
-        print(_result['acc_mean'])
+            train_loader = create_loader(train_windows, train_meta['classes'], 
+                                        batch=BATCH_SIZE, shuffle=True, 
+                                        workers=WORKERS, persistent_workers=PRESIST_WORKER)
+            val_loader = create_loader(val_windows, val_meta['classes'], 
+                                        batch=BATCH_SIZE, shuffle=False, 
+                                        workers=WORKERS, persistent_workers=PRESIST_WORKER)
+            test_loader = create_loader(test_windows, test_meta['classes'], 
+                                        batch=BATCH_SIZE, shuffle=False, 
+                                        workers=WORKERS, persistent_workers=PRESIST_WORKER)
 
-        del train_loader, val_loader, test_loader, model
-        torch.cuda.empty_cache()
-        gc.collect()
+            model = MLP(n_features)
+            weights = torch.tensor(compute_class_weight('balanced', 
+                                        classes=np.arange(CLASSES), 
+                                            y=train_meta['classes']),
+                                            dtype=torch.float32,
+                                            device=DEVICE)
+            train(model=model, name=NAME, 
+                train_loader=train_loader,
+                val_loader=val_loader,
+                loss_fn=nn.CrossEntropyLoss(weight=weights),
+                save_chkp=SAVE_CHKP, verbose=VERBOSE)
+            _result = eval_within(model=model, 
+                                loader=test_loader,
+                                meta=test_meta)
+            results.append(_result)
+            print(_result['acc_mean'])
 
-os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)
-os.makedirs(f"{CHECKPOINT_PATH}/{NAME}/", exist_ok=True)
-np.save(f"{CHECKPOINT_PATH}/{NAME}/results.npy", results)
+            del train_loader, val_loader, test_loader, model
+            torch.cuda.empty_cache()
+            gc.collect()
+
+    os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)
+    os.makedirs(f"{CHECKPOINT_PATH}/{NAME}/", exist_ok=True)
+    np.save(f"{CHECKPOINT_PATH}/{NAME}/results.npy", results)
