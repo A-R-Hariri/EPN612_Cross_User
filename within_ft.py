@@ -40,8 +40,9 @@ test_meta = np.load(join(PICKLE_PATH, 'test_meta.npy'), allow_pickle=True).item(
 
 
 # Within
-REPS = sys.argv[1].split(',') if len(sys.argv) > 2 else 15
+REPS = sys.argv[2].split(',') if len(sys.argv) > 2 else 15
 REPS = list(map(int, REPS))
+print(REPS)
 
 for rep in REPS:
     NAME = f'cnn_raw_within_ft_{rep}'

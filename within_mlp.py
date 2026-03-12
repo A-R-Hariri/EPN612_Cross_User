@@ -43,7 +43,7 @@ test_windows = np.load(join(PICKLE_PATH, 'test_windows.npy'), mmap_mode=MMAP_MOD
 test_meta = np.load(join(PICKLE_PATH, 'test_meta.npy'), allow_pickle=True).item()
 
 # Within
-REPS = sys.argv[1].split(',') if len(sys.argv) > 2 else 15
+REPS = sys.argv[2].split(',') if len(sys.argv) > 2 else 15
 REPS = list(map(int, REPS))
 
 for rep in REPS:
@@ -77,11 +77,14 @@ for rep in REPS:
             # -------- Features --------
             feature_extractor = FeatureExtractor()
             train_windows = feature_extractor.extract_features(FEATURE_LIST, train_windows, array=True,
-                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                            train_windows.shape[0], -1))
             val_windows = feature_extractor.extract_features(FEATURE_LIST, val_windows, array=True,
-                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                            val_windows.shape[0], -1))
             test_windows = feature_extractor.extract_features(FEATURE_LIST, test_windows, array=True,
-                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                            test_windows.shape[0], -1))
             n_features = train_windows.shape[1]
 
             train_loader = create_loader(train_windows, train_meta['classes'], 

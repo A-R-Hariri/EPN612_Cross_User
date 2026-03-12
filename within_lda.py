@@ -75,16 +75,19 @@ for rep in REPS:
 
             # -------- Features --------
             feature_extractor = FeatureExtractor()
+            
             train_windows = feature_extractor.extract_features(FEATURE_LIST, train_windows, array=True,
-                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                            train_windows.shape[0], -1))
             val_windows = feature_extractor.extract_features(FEATURE_LIST, val_windows, array=True,
-                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                            val_windows.shape[0], -1))
             test_windows = feature_extractor.extract_features(FEATURE_LIST, test_windows, array=True,
-                                        fix_feature_errors=False, feature_dic=FEATURE_DIC)
+                                        fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                            test_windows.shape[0], -1))
             
             model = LDA()
-            model = model.fit(train_windows.reshape((train_windows.shape[0], -1)),
-                            train_meta['classes'])
+            model = model.fit(train_windows, train_meta['classes'])
 
             _result = eval_within_lda(model=model,
                                     x=test_windows.reshape((test_windows.shape[0], -1)),
