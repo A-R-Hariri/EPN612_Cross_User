@@ -64,6 +64,7 @@ test_meta_relabeled = np.load(join(PICKLE_PATH, 'test_meta_relabeled.npy'), allo
 
 # ======== FEATURES ========
 feature_extractor = FeatureExtractor()
+
 train_windows = feature_extractor.extract_features(FEATURE_LIST, train_windows, array=True,
                               fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
                                   train_windows.shape[0], -1))
@@ -93,6 +94,7 @@ val_windows_segmented = feature_extractor.extract_features(FEATURE_LIST, val_win
 test_windows_relabeled = feature_extractor.extract_features(FEATURE_LIST, test_windows_relabeled, 
                                 array=True, fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
                                   test_windows_relabeled.shape[0], -1))
+
 n_features = train_windows.shape[1]
 
 
