@@ -18,10 +18,6 @@ class MLP(nn.Module):
         
         self.drop = nn.Dropout(dropout)
         self.relu = nn.ReLU()
-        # self.gelu = nn.GELU()
-        self.norm1 = nn.BatchNorm1d(512)
-        self.norm2 = nn.BatchNorm1d(256)
-        self.norm3 = nn.BatchNorm1d(128)
 
         self.apply(self._init)
 
@@ -35,15 +31,12 @@ class MLP(nn.Module):
         x = x / 128.0
 
         x = self.relu(self.fc1(x))
-        x = self.norm1(x)
         x = self.drop(x)
 
         x = self.relu(self.fc2(x))
-        x = self.norm2(x)
         x = self.drop(x)
 
         x = self.relu(self.fc3(x))
-        x = self.norm3(x)
         x = self.drop(x)
 
         emb = self.relu(self.fc_emb(x))
