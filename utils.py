@@ -849,7 +849,7 @@ def eval_test(model, loaders, metas, name,
 
     # Atomic CSV logging (Fastest concurrent-safe method)
     csv_path = f"{FIGURE_PATH}/results.csv"
-    rows = [{"model": name, "set": tag, **r} for tag, r in results.items()]
+    rows = [{"model": name, "test set": tag, **r} for tag, r in results.items()]
     empty_row = {k: "" for k in rows[0].keys()}
     rows.insert(0, empty_row)
     df_new = pd.DataFrame(rows)
@@ -1022,7 +1022,7 @@ def eval_test_lda(model, X, metas, name, save=True):
 
     # Atomic CSV logging (Fastest concurrent-safe method)
     csv_path = f"{FIGURE_PATH}/results.csv"
-    rows = [{"model": name, "set": tag, **r} for tag, r in results.items()]
+    rows = [{"model": name, "test_set": tag, **r} for tag, r in results.items()]
     empty_row = {k: "" for k in rows[0].keys()}
     rows.insert(0, empty_row)
     df_new = pd.DataFrame(rows)
