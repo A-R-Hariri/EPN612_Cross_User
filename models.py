@@ -5,7 +5,28 @@ from torch.autograd import Function
 
 from utils import *
 
+        
+# ======== GRL ========
+class _GRLFn(Function):
+    @staticmethod
+    def forward(ctx, x, lambd: float):
+        ctx.lambd = float(lambd)
+        return x.view_as(x)
 
+    @staticmethod
+    def backward(ctx, grad_output):
+        return -ctx.lambd * grad_output, None
+
+
+class GRL(nn.Module):
+    def __init__(self, lambd: float = 1.0):
+        super().__init__()
+        self.lambd = float(lambd)
+
+    def forward(self, x):
+        return _GRLFn.apply(x, self.lambd)
+    
+# ======== MODELS ========
 class MLP(nn.Module):
     def __init__(self, feats, emb_dim=128, proj_dim=128, dropout=DROPOUT):
         super().__init__()
@@ -48,28 +69,117 @@ class MLP(nn.Module):
         if return_emb:
             return emb
         return logits
-        
-# ======== GRL ========
-class _GRLFn(Function):
-    @staticmethod
-    def forward(ctx, x, lambd: float):
-        ctx.lambd = float(lambd)
-        return x.view_as(x)
+    
 
-    @staticmethod
-    def backward(ctx, grad_output):
-        return -ctx.lambd * grad_output, None
-
-
-class GRL(nn.Module):
-    def __init__(self, lambd: float = 1.0):
+class CNNBaseline(nn.Module):
+    def __init__(self, ch=CH, num_classes=CLASSES, dropout=DROPOUT):
         super().__init__()
-        self.lambd = float(lambd)
+
+        self.conv1 = nn.Conv1d(ch, 64, 8, padding="same")
+        self.conv2 = nn.Conv1d(64, 128, 6, padding="same")
+        self.conv3 = nn.Conv1d(128, 128, 4, padding="same")
+
+        self.pool = nn.AdaptiveAvgPool1d(1)
+
+        self.fc1 = nn.Linear(128, 128)
+        self.fc_emb = nn.Linear(128, 128)
+
+        self.classifier = nn.Linear(128, num_classes)
+
+        self.relu = nn.ReLU()
+        self.drop = nn.Dropout(dropout)
 
     def forward(self, x):
-        return _GRLFn.apply(x, self.lambd)
+        x = x / 128.0
+
+        x = self.drop(self.relu(self.conv1(x)))
+        x = self.drop(self.relu(self.conv2(x)))
+        x = self.drop(self.relu(self.conv3(x)))
+
+        x = self.pool(x).squeeze(-1)
+
+        x = self.relu(self.fc1(x))
+        emb = self.fc_emb(x)
+
+        logits = self.classifier(emb)
+        return logits
     
-# ======== MODELS ========
+
+class LSTM(nn.Module):
+    def __init__(self, ch=CH, hidden=128, layers=2, num_classes=CLASSES):
+        super().__init__()
+
+        self.lstm = nn.LSTM(
+            input_size=ch,
+            hidden_size=hidden,
+            num_layers=layers,
+            batch_first=True,
+            bidirectional=True
+        )
+
+        self.fc1 = nn.Linear(hidden * 2, 128)
+        self.fc_emb = nn.Linear(128, 128)
+
+        self.classifier = nn.Linear(128, num_classes)
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        x = x / 128.0
+
+        # x: (B, C, T) → (B, T, C)
+        x = x.transpose(1,2)
+
+        x, _ = self.lstm(x)
+
+        x = x[:, -1]
+        x = self.relu(self.fc1(x))
+        emb = self.fc_emb(x)
+
+        logits = self.classifier(emb)
+
+        return logits
+    
+
+class TransformerEMG(nn.Module):
+    def __init__(self, ch=CH, seq=SEQ, d_model=128, num_heads=4, num_layers=2, num_classes=CLASSES):
+        super().__init__()
+
+        self.proj = nn.Linear(ch, d_model)
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=d_model,
+            nhead=num_heads,
+            batch_first=True)
+
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=num_layers)
+
+        self.fc1 = nn.Linear(128, 128)
+        self.fc_emb = nn.Linear(128, 128)
+
+        self.classifier = nn.Linear(128, num_classes)
+
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        x = x / 128.0
+
+        # (B,C,T) -> (B,T,C)
+        x = x.transpose(1,2)
+        x = self.proj(x)
+        x = self.encoder(x)
+        x = x.mean(dim=1)
+
+        x = self.relu(self.fc1(x))
+        emb = self.fc_emb(x)
+
+        logits = self.classifier(emb)
+
+        return logits
+    
+
+# -------- Proposed --------
 class CNN(nn.Module):
     def __init__(self, ch=CH, seq=SEQ, emb_dim=128, 
                  num_classes=CLASSES, dropout=DROPOUT):
@@ -83,14 +193,6 @@ class CNN(nn.Module):
         self.conv4 = nn.Conv1d(96, 128, 4, dilation=1, padding="same")
 
         self.pool = nn.AdaptiveAvgPool1d(1)
-        # with torch.no_grad():
-        #     dummy = torch.zeros(1, ch, seq)
-        #     x1 = self.conv1(dummy)
-        #     x2 = self.conv2(dummy)
-        #     x3 = self.conv3(dummy)
-        #     x = torch.cat((x1, x2, x3), 1)
-        #     x = self.conv4(x)
-        #     fc_in = x.flatten(1).shape[1]
         
         self.fc1 = nn.Linear(128, 128)
         self.fc_emb = nn.Linear(128, emb_dim)
@@ -230,22 +332,6 @@ class RestLoss(nn.Module):
         loss = loss * (1 + self.alpha2 * p2.float())
 
         return loss.mean()
-    
-
-# class EqLoss(nn.Module):
-#     def __init__(self, alpha=0.3, eps=1e-8, weight=None):
-#         super().__init__()
-#         self.alpha = alpha
-#         self.eps = eps
-#         self.ce = nn.CrossEntropyLoss(reduction='none', 
-#                                       weight=weight)
-        
-#     def forward(self, logits, targets):
-#         l = self.ce(logits, targets)
-#         mean = l.mean()
-#         var = l.var(unbiased=False)
-#         equity = var / (mean.detach()**2 + self.eps)
-#         return mean + self.alpha * equity
 
 
 class EqLoss(nn.Module):
