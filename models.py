@@ -5,26 +5,6 @@ from torch.autograd import Function
 
 from utils import *
 
-        
-# ======== GRL ========
-class _GRLFn(Function):
-    @staticmethod
-    def forward(ctx, x, lambd: float):
-        ctx.lambd = float(lambd)
-        return x.view_as(x)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        return -ctx.lambd * grad_output, None
-
-
-class GRL(nn.Module):
-    def __init__(self, lambd: float = 1.0):
-        super().__init__()
-        self.lambd = float(lambd)
-
-    def forward(self, x):
-        return _GRLFn.apply(x, self.lambd)
     
 # ======== MODELS ========
 class MLP(nn.Module):
@@ -75,9 +55,9 @@ class CNNBaseline(nn.Module):
     def __init__(self, ch=CH, num_classes=CLASSES, dropout=DROPOUT):
         super().__init__()
 
-        self.conv1 = nn.Conv1d(ch, 64, 8, padding="same")
-        self.conv2 = nn.Conv1d(64, 128, 6, padding="same")
-        self.conv3 = nn.Conv1d(128, 128, 4, padding="same")
+        self.conv1 = nn.Conv1d(ch, 64, 4, padding="same")
+        self.conv2 = nn.Conv1d(64, 128, 3, padding="same")
+        self.conv3 = nn.Conv1d(128, 128, 3, padding="same")
 
         self.pool = nn.AdaptiveAvgPool1d(1)
 
@@ -241,6 +221,25 @@ class CNN(nn.Module):
         return logits
     
 
+# -------- GRL --------
+class _GRLFn(Function):
+    @staticmethod
+    def forward(ctx, x, lambd: float):
+        ctx.lambd = float(lambd)
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return -ctx.lambd * grad_output, None
+
+class GRL(nn.Module):
+    def __init__(self, lambd: float = 1.0):
+        super().__init__()
+        self.lambd = float(lambd)
+
+    def forward(self, x):
+        return _GRLFn.apply(x, self.lambd)
+    
 class CNN_GRL(nn.Module):
     def __init__(self, ch=CH, seq=SEQ, emb_dim=128, 
                  num_classes=CLASSES, num_grl=306,
@@ -379,7 +378,7 @@ class CVaRLoss(nn.Module):
 
 
 class TripletLoss(nn.Module):
-    def __init__(self, margin=0.2, w_hard=1.0, w_soft=0.0, normalize=True):
+    def __init__(self, margin=0.3, w_hard=1.0, w_soft=0.0, normalize=True):
         super().__init__()
         self.margin = margin
         self.w_hard = w_hard
@@ -443,3 +442,40 @@ class TripletLoss(nn.Module):
             denom += abs(self.w_soft)
 
         return loss / max(denom, 1e-12)
+
+
+class PrototypeLoss(nn.Module):
+    def __init__(self, lambda_proto=0.5, normalize=True, weight=None):
+        super().__init__()
+        self.lambda_proto = lambda_proto
+        self.normalize = normalize
+        self.ce = nn.CrossEntropyLoss(weight=weight)
+
+    def forward(self, emb, logits, labels):
+
+        if self.normalize:
+            emb = F.normalize(emb, dim=1)
+
+        ce = self.ce(logits, labels)
+
+        classes = torch.unique(labels)
+        proto_loss = 0.0
+        count = 0
+
+        for c in classes:
+            mask = labels == c
+            z = emb[mask]
+
+            if z.size(0) <= 1:
+                continue
+
+            proto = z.mean(dim=0, keepdim=True)
+            proto_loss += ((z - proto) ** 2).sum(dim=1).mean()
+            count += 1
+
+        if count > 0:
+            proto_loss = proto_loss / count
+
+        loss = (1 - self.lambda_proto) * ce + self.lambda_proto * proto_loss
+
+        return loss
