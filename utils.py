@@ -484,7 +484,7 @@ def train_triplet(model, train_loader, val_loader, name,
         total = 0
         step = 0
         
-        desc = f"{name} | Ep {ep} [α={current_alpha:.3f}]"
+        desc = f"{name} | Ep {ep} [alpha={current_alpha:.3f}]"
         pbar = tqdm(total=len(train_loader), desc=desc, 
                     leave=True, dynamic_ncols=True, disable=not verbose)
 
