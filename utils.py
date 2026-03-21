@@ -240,6 +240,7 @@ def create_triplet_loader(x, y, subjects,
 # ======== TRAINING & VALIDATING ========
 def train(model, train_loader, val_loader, name,
           loss_fn=nn.CrossEntropyLoss(),
+          return_emb=False, return_logits=False,
           epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
           lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, 
           patience=PATIENCE, device=DEVICE,
@@ -274,8 +275,12 @@ def train(model, train_loader, val_loader, name,
 
             opt.zero_grad(set_to_none=True)
             with autocast(device_type="cuda", enabled=(device=="cuda")):
-                logits = model(xb)
-                loss = loss_fn(logits, yb)
+                if return_emb and return_logits:
+                    emb, logits = model(xb, return_emb, return_logits)
+                    loss = loss_fn(emb, logits, yb)
+                else:
+                    logits = model(xb)
+                    loss = loss_fn(logits, yb)                    
 
             scaler.scale(loss).backward()
             scaler.step(opt)
@@ -296,7 +301,8 @@ def train(model, train_loader, val_loader, name,
         if step % UPDATE_EVERY:
             pbar.update(step % UPDATE_EVERY)
 
-        val_acc, val_loss = evaluate(model, val_loader, loss_fn, device)
+        val_acc, val_loss = evaluate(model, val_loader, loss_fn, 
+                                     return_emb, return_logits, device)
         sch.step(val_loss)
 
         if val_loss < best_val:
@@ -332,6 +338,7 @@ def train(model, train_loader, val_loader, name,
 def train_grl(model, train_loader, val_loader, name,
             loss_fn=nn.CrossEntropyLoss(),
             loss_fn_grl=None,
+            return_emb=False, return_logits=False,
             grl_weight=1.0, ramp_epochs=50,
             epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
             lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, 
@@ -406,7 +413,8 @@ def train_grl(model, train_loader, val_loader, name,
         if step % UPDATE_EVERY:
             pbar.update(step % UPDATE_EVERY)
 
-        val_acc, val_loss = evaluate(model, val_loader, loss_fn, device)
+        val_acc, val_loss = evaluate(model, val_loader, loss_fn, 
+                                     return_emb, return_logits, device)
         sch.step(val_loss)
 
         if val_loss < best_val:
@@ -443,13 +451,11 @@ def train_grl(model, train_loader, val_loader, name,
 
 def train_triplet(model, train_loader, val_loader, name,
           epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
-          criterion_ce=nn.CrossEntropyLoss(),
-          criterion_tri=None,
+          criterion_ce=nn.CrossEntropyLoss(), criterion_tri=None,
           lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, 
           patience=PATIENCE, device=DEVICE, verbose=VERBOSE,
-          epochs_phase1=10, save_chkp=False, 
-          tr_phase1=0.95, ce_phase1=0.05,
-          tr_phase2=0.5, ce_phase2=0.5):
+          alpha_start=0.95, alpha_end=0.5, warmup_epochs=10,
+          save_chkp=False):
 
     model.to(device)
     opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)
@@ -464,25 +470,11 @@ def train_triplet(model, train_loader, val_loader, name,
     if save_chkp:
         os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
 
-    phase = 1
-    current_alpha = tr_phase1
-    current_ce_w = ce_phase1
-
     ep = 1
     while ep <= epochs:
-        # Phase Switching Logic
-        if ep > epochs_phase1 and phase == 1:
-            print(f"\n{name} | PHASE 2 START: Joint Optimization")
-            ep = 1                                      # Reset episodes
-            opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)
-            sch = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                opt, mode="min", factor=lr_factor, patience=lr_patience, min_lr=min_lr)
-            scaler = GradScaler(enabled=(device=="cuda"))
-            phase = 2
-            current_alpha = tr_phase2
-            current_ce_w = ce_phase2
-            wait = 0 
-            best_val_metric = 1e9
+        progress = min((ep - 1) / warmup_epochs, 1.0)
+        current_alpha = alpha_start - (alpha_start - alpha_end) * progress
+        current_ce_w = 1.0 - current_alpha
 
         model.train()
         total_loss = torch.tensor(0.0, device=device)
@@ -492,7 +484,7 @@ def train_triplet(model, train_loader, val_loader, name,
         total = 0
         step = 0
         
-        desc = f"{name} | Ep {ep} [P{phase}]"
+        desc = f"{name} | Ep {ep} [α={current_alpha:.3f}]"
         pbar = tqdm(total=len(train_loader), desc=desc, 
                     leave=True, dynamic_ncols=True, disable=not verbose)
 
@@ -537,6 +529,7 @@ def train_triplet(model, train_loader, val_loader, name,
         val_acc, val_loss_ce, val_loss_tri = evaluate_triplet(
             model, val_loader, criterion_ce, device, 
             triplet_fn=criterion_tri, alpha=current_alpha)
+        
         monitor_metric = (current_ce_w * val_loss_ce) + (current_alpha * val_loss_tri)
         sch.step(monitor_metric)
 
@@ -547,23 +540,9 @@ def train_triplet(model, train_loader, val_loader, name,
         else:
             wait += 1
             if wait >= patience:
-                if phase == 1:
-                     # Force Phase 2 transition if stuck in Phase 1
-                    ep = 1                                      # Reset episodes
-                    opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)
-                    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                        opt, mode="min", factor=lr_factor, patience=lr_patience, min_lr=min_lr)
-                    scaler = GradScaler(enabled=(device=="cuda"))
-                    tqdm.write(f"{name} | Phase 1 Stalled. Forcing Phase 2.")
-                    phase = 2
-                    current_alpha = tr_phase2
-                    current_ce_w = ce_phase2
-                    wait = 0 
-                    best_val_metric = 1e9
-                else:
-                    tqdm.write(f"{name} | Early stop")
-                    pbar.close()
-                    break
+                tqdm.write(f"{name} | Early stop")
+                pbar.close()
+                break
 
         pbar.set_postfix(
             L=f"{total_loss.item()/step:.6f}",
@@ -710,7 +689,8 @@ def run_pca_sweep(model, loader, name, device=DEVICE):
 
 # ---- VALIDATION ----
 @torch.no_grad()
-def evaluate(model, loader, loss_fn, device):
+def evaluate(model, loader, loss_fn, 
+             return_emb, return_logits, device):
     model.eval()
     # Initialize on GPU
     lsum = torch.tensor(0.0, device=device)
@@ -720,8 +700,12 @@ def evaluate(model, loader, loss_fn, device):
         xb = xb.to(device, non_blocking=True)
         yb = yb.to(device, non_blocking=True)
         with torch.amp.autocast(device_type="cuda", enabled=(device=="cuda")):
-            logits = model(xb)
-            loss = loss_fn(logits, yb)
+            if return_emb and return_logits:
+                emb, logits = model(xb, return_emb, return_logits)
+                loss = loss_fn(emb, logits, yb)
+            else:
+                logits = model(xb)
+                loss = loss_fn(logits, yb)  
         lsum += loss.detach()
         cor += (logits.argmax(1) == yb).sum()
         tot += yb.numel()
