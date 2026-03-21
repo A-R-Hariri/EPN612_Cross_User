@@ -71,7 +71,7 @@ model = CNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 train_triplet(model=model, name=NAME, 
       train_loader=train_loader, val_loader=val_loader_triplet, 
-      criterion_ce=nn.CrossEntropyLoss(weight=None),
+      criterion_ce=nn.CrossEntropyLoss(weight=weights),
       criterion_tri=TripletLoss(),
       alpha_start=0.95, alpha_end=0.5, warmup_epochs=10, 
       save_chkp=SAVE_CHKP)
