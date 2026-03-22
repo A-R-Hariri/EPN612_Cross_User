@@ -72,29 +72,8 @@ print(model, f"\nParameters count: {count_params(model):,}")
 train_triplet(model=model, name=NAME, 
       train_loader=train_loader, val_loader=val_loader_triplet, 
       criterion_ce=nn.CrossEntropyLoss(weight=weights),
-      criterion_tri=TripletLoss(),
-      alpha_start=0.95, alpha_end=0.5, warmup_epochs=10, 
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnn_triplet_nw"
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-train_triplet(model=model, name=NAME, 
-      train_loader=train_loader, val_loader=val_loader_triplet, 
-      criterion_ce=nn.CrossEntropyLoss(weight=None),
-      criterion_tri=TripletLoss(),
-      alpha_start=0.95, alpha_end=0.5, warmup_epochs=10, 
-      save_chkp=SAVE_CHKP)
+      criterion_tri=TripletLoss(), save_chkp=SAVE_CHKP,
+      alpha_start=0.0, alpha_end=0.2, warmup_epochs=20)
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
 # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
 eval_test(model=model, name=NAME, 
