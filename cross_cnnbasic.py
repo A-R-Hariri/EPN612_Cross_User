@@ -21,6 +21,10 @@ SEED = 13; random.seed(SEED); np.random.seed(SEED)
 GENERATOR = torch.manual_seed(SEED)
 MMAP_MODE = 'r'; SAVE_CHKP = True
 
+SAMPLING_RATE = 200
+FEATURE_LIST = ['WENG']
+FEATURE_DIC = {'WENG_fs': SAMPLING_RATE}
+
 
 # ======== LOAD DATA ========
 train_data = np.load(join(PICKLE_PATH, 'train_data.npy'), allow_pickle=True).item()
@@ -116,7 +120,7 @@ weights_relabeled = torch.tensor(compute_class_weight('balanced',
 
 
 NAME = "cnnbasic_raw"
-model = CNNBaseline()
+model = CNNBasic()
 print(model, f"\nParameters count: {count_params(model):,}")
 train(model=model, name=NAME, 
       train_loader=train_loader,
@@ -135,7 +139,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = "cnnbasic_segmented"
-model = CNNBaseline()
+model = CNNBasic()
 print(model, f"\nParameters count: {count_params(model):,}")
 train(model=model, name=NAME, 
       train_loader=train_loader_segmented,
@@ -153,32 +157,162 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = "cnnbasic_relabeled"
-model = CNNBaseline()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_relabeled,
-      val_loader=val_loader_relabeled, 
-      loss_fn=nn.CrossEntropyLoss(weight=weights_relabeled),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
+# NAME = "cnnbasic_relabeled"
+# model = CNNBaseline()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_relabeled,
+#       val_loader=val_loader_relabeled, 
+#       loss_fn=nn.CrossEntropyLoss(weight=weights_relabeled),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
 
 
-NAME = "cnnbasic_raw_nw"
-model = CNNBaseline()
+# NAME = "cnnbasic_raw_nw"
+# model = CNNBaseline()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader,
+#       val_loader=val_loader, 
+#       loss_fn=nn.CrossEntropyLoss(weight=None),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnnbasic_segmented_nw"
+# model = CNNBaseline()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=nn.CrossEntropyLoss(weight=None),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnnbasic_relabeled_nw"
+# model = CNNBaseline()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_relabeled,
+#       val_loader=val_loader_relabeled, 
+#       loss_fn=nn.CrossEntropyLoss(weight=None),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# ======== WENG ========
+feature_extractor = FeatureExtractor()
+
+train_windows = feature_extractor.extract_features(FEATURE_LIST, train_windows, array=True,
+                              fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                  train_windows.shape[0], 8, 6))
+val_windows = feature_extractor.extract_features(FEATURE_LIST, val_windows, array=True,
+                              fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                  val_windows.shape[0], 8, 6))
+test_windows = feature_extractor.extract_features(FEATURE_LIST, test_windows, array=True,
+                              fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                  test_windows.shape[0], 8, 6))
+
+train_windows_segmented = feature_extractor.extract_features(FEATURE_LIST, train_windows_segmented, array=True,
+                              fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                  train_windows_segmented.shape[0], 8, 6))
+val_windows_relabeled = feature_extractor.extract_features(FEATURE_LIST, val_windows_relabeled, array=True,
+                              fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                  val_windows_relabeled.shape[0], 8, 6))
+test_windows_segmented = feature_extractor.extract_features(FEATURE_LIST, test_windows_segmented, 
+                                array=True, fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                  test_windows_segmented.shape[0], 8, 6))
+
+train_windows_relabeled = feature_extractor.extract_features(FEATURE_LIST, train_windows_relabeled, array=True,
+                              fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                  train_windows_relabeled.shape[0], 8, 6))
+val_windows_segmented = feature_extractor.extract_features(FEATURE_LIST, val_windows_segmented, array=True,
+                              fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                  val_windows_segmented.shape[0], 8, 6))
+test_windows_relabeled = feature_extractor.extract_features(FEATURE_LIST, test_windows_relabeled, 
+                                array=True, fix_feature_errors=False, feature_dic=FEATURE_DIC).reshape((
+                                  test_windows_relabeled.shape[0], 8, 6))
+
+
+train_loader = create_loader(train_windows, train_meta['classes'], 
+                            batch=BATCH_SIZE, shuffle=True)
+train_loader_grl = create_loader_grl(train_windows, train_meta['classes'], 
+                                     train_meta['subjects'],
+                                     batch=BATCH_SIZE, shuffle=True)
+val_loader = create_loader(val_windows, val_meta['classes'], 
+                            batch=BATCH_SIZE, shuffle=False)
+test_loader = create_loader(test_windows, test_meta['classes'], 
+                            batch=BATCH_SIZE, shuffle=False)
+
+train_loader_segmented = create_loader(train_windows_segmented, 
+                            train_meta_segmented['classes'], 
+                            batch=BATCH_SIZE, shuffle=True)
+train_loader_segmented_grl = create_loader_grl(train_windows_segmented, 
+                            train_meta_segmented['classes'], 
+                            train_meta_segmented['subjects'], 
+                            batch=BATCH_SIZE, shuffle=True)
+val_loader_segmented = create_loader(val_windows_segmented, 
+                            val_meta_segmented['classes'], 
+                            batch=BATCH_SIZE, shuffle=False)
+test_loader_segmented = create_loader(test_windows_segmented, 
+                            test_meta_segmented['classes'], 
+                            batch=BATCH_SIZE, shuffle=False)
+
+train_loader_relabeled = create_loader(train_windows_relabeled, 
+                            train_meta_relabeled['classes'],
+                            batch=BATCH_SIZE, shuffle=True)
+train_loader_relabeled_grl = create_loader_grl(train_windows_relabeled, 
+                            train_meta_relabeled['classes'],
+                            train_meta_relabeled['subjects'],
+                            batch=BATCH_SIZE, shuffle=True)
+val_loader_relabeled = create_loader(val_windows_relabeled, 
+                            val_meta_relabeled['classes'],
+                            batch=BATCH_SIZE, shuffle=False)
+test_loader_relabeled = create_loader(test_windows_relabeled, 
+                            test_meta_relabeled['classes'],
+                            batch=BATCH_SIZE, shuffle=False)
+
+
+NAME = "cnnbasic_raw_weng"
+model = CNNBasic()
 print(model, f"\nParameters count: {count_params(model):,}")
 train(model=model, name=NAME, 
       train_loader=train_loader,
       val_loader=val_loader, 
-      loss_fn=nn.CrossEntropyLoss(weight=None),
+      loss_fn=nn.CrossEntropyLoss(weight=weights),
       save_chkp=SAVE_CHKP)
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
 # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
@@ -191,32 +325,13 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = "cnnbasic_segmented_nw"
-model = CNNBaseline()
+NAME = "cnnbasic_segmented_weng"
+model = CNNBasic()
 print(model, f"\nParameters count: {count_params(model):,}")
 train(model=model, name=NAME, 
       train_loader=train_loader_segmented,
       val_loader=val_loader_segmented, 
-      loss_fn=nn.CrossEntropyLoss(weight=None),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnnbasic_relabeled_nw"
-model = CNNBaseline()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_relabeled,
-      val_loader=val_loader_relabeled, 
-      loss_fn=nn.CrossEntropyLoss(weight=None),
+      loss_fn=nn.CrossEntropyLoss(weight=weights_segmented),
       save_chkp=SAVE_CHKP)
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
 # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
