@@ -454,7 +454,7 @@ def train_triplet(model, train_loader, val_loader, name,
           criterion_ce=nn.CrossEntropyLoss(), criterion_tri=None,
           lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, 
           patience=PATIENCE, device=DEVICE, verbose=VERBOSE,
-          alpha_start=0.95, alpha_end=0.5, warmup_epochs=10,
+          alpha_start=0.0, alpha_end=0.2, warmup_epochs=20,
           save_chkp=False):
 
     model.to(device)
