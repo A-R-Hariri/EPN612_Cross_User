@@ -1,6 +1,7 @@
 import gc
 from os.path import join
 import numpy as np 
+from numpy.lib.stride_tricks import sliding_window_view
 import copy
 
 import libemg
@@ -160,9 +161,14 @@ def extract_active_segment(emg_data, window_size=5, threshold=0.25,
         segmented_bounds
     )
 
-train_data_segmented.data, train_data_segmented.classes, train_data_segmented.reps, train_data_segmented.subjects, train_segmented_bounds = extract_active_segment(train_data_segmented)
-val_data_segmented.data, val_data_segmented.classes, val_data_segmented.reps, val_data_segmented.subjects, val_segmented_bounds = extract_active_segment(val_data_segmented)
-test_data_segmented.data, test_data_segmented.classes, test_data_segmented.reps, test_data_segmented.subjects, test_segmented_bounds = extract_active_segment(test_data_segmented)
+train_data_segmented.data, train_data_segmented.classes, train_data_segmented.reps, \
+    train_data_segmented.subjects, train_segmented_bounds = extract_active_segment(train_data_segmented)
+
+val_data_segmented.data, val_data_segmented.classes, val_data_segmented.reps, \
+    val_data_segmented.subjects, val_segmented_bounds = extract_active_segment(val_data_segmented)
+
+test_data_segmented.data, test_data_segmented.classes, test_data_segmented.reps, \
+    test_data_segmented.subjects, test_segmented_bounds = extract_active_segment(test_data_segmented)
 
 train_windows_segmented, train_meta_segmented = train_data_segmented.parse_windows(SEQ, INC)
 val_windows_segmented, val_meta_segmented = val_data_segmented.parse_windows(SEQ, INC)
@@ -317,6 +323,172 @@ np.save(join(PICKLE_PATH, 'val_windows_relabeled'), X_v.astype(DTYPE))
 np.save(join(PICKLE_PATH, 'val_meta_relabeled'), y_v)
 np.save(join(PICKLE_PATH, 'test_windows_relabeled'), X_t.astype(DTYPE))
 np.save(join(PICKLE_PATH, 'test_meta_relabeled'), y_t)
+
+
+# ======== STANDARD & SOFT ========
+def detect_segments(x, thresh, win_len=SEQ):
+    x = np.abs(x)      
+    T, C = x.shape
+    if T < win_len:
+        return -1, -1
+
+    windows = sliding_window_view(x, window_shape=win_len, axis=0) 
+    vals = windows.mean(axis=(1,2))
+    mask = vals > thresh
+    if mask.any():
+        idx = np.where(mask)[0] 
+        first_idx = idx[0]
+        last_idx  = idx[-1] + win_len - 1
+    else:
+        first_idx = 0
+        last_idx  = T
+    if (last_idx - first_idx) <=  2 * SEQ + INC:
+        first_idx = 0
+        last_idx  = T
+    return first_idx, last_idx
+
+train_data = np.load(join(PICKLE_PATH, 'train_data.npy'), allow_pickle=True).item()
+val_data = np.load(join(PICKLE_PATH, 'val_data.npy'), allow_pickle=True).item()
+test_data = np.load(join(PICKLE_PATH, 'test_data.npy'), allow_pickle=True).item()
+
+train_data_standard = copy.deepcopy(train_data)
+val_data_standard = copy.deepcopy(val_data)
+test_data_standard = copy.deepcopy(test_data)
+
+train_windows = np.load(join(PICKLE_PATH, 'train_windows.npy'))
+train_meta = np.load(join(PICKLE_PATH, 'train_meta.npy'), allow_pickle=True).item()
+
+x_rst = train_windows[train_meta['classes'] == 0]
+feat = np.abs(x_rst).mean(axis=(-1, -2))
+mu = feat.mean()
+sigma = feat.std()
+thresh = mu + 3 * sigma
+
+total = []
+
+t_data = {'data': [], 'classes': [], 'subjects': []}
+for i in range(len(train_data.data)):
+    if train_data.classes[i][0].item() == 0:
+        t_data['data'].append(train_data.data[i])
+        t_data['classes'].append(train_data.classes[i][0].item())
+        t_data['subjects'].append(train_data.subjects[i][0].item())
+        total.append(1.0)
+        continue
+    sb, se = detect_segments(train_data.data[i], mu + 3 * sigma)
+    t_data['data'].append(train_data.data[i][sb:se])
+    t_data['classes'].append(train_data.classes[i][0].item())
+    t_data['subjects'].append(train_data.subjects[i][0].item())
+    train_data_standard.data[i] = train_data.data[i][sb:se]
+    train_data_standard.reps[i] = train_data.reps[i][sb:se]
+    train_data_standard.classes[i] = train_data.classes[i][sb:se]
+    train_data_standard.subjects[i] = train_data.subjects[i][sb:se]
+    total.append(len(train_data.data[i][sb:se]) / len(train_data.data[i]))
+
+v_data = {'data': [], 'classes': [], 'subjects': []}
+for i in range(len(val_data.data)):
+    if val_data.classes[i][0].item() == 0:
+        v_data['data'].append(val_data.data[i])
+        v_data['classes'].append(val_data.classes[i][0].item())
+        v_data['subjects'].append(val_data.subjects[i][0].item())
+        total.append(1.0)
+        continue
+    sb, se = detect_segments(val_data.data[i], mu + 3 * sigma)
+    v_data['data'].append(val_data.data[i][sb:se])
+    v_data['classes'].append(val_data.classes[i][0].item())
+    v_data['subjects'].append(val_data.subjects[i][0].item())
+    val_data_standard.data[i] = val_data.data[i][sb:se]
+    val_data_standard.reps[i] = val_data.reps[i][sb:se]
+    val_data_standard.classes[i] = val_data.classes[i][sb:se]
+    val_data_standard.subjects[i] = val_data.subjects[i][sb:se]
+    total.append(len(val_data.data[i][sb:se]) / len(val_data.data[i]))
+
+ts_data = {'data': [], 'classes': [], 'subjects': []}
+for i in range(len(test_data.data)):
+    if test_data.classes[i][0].item() == 0:
+        ts_data['data'].append(test_data.data[i])
+        ts_data['classes'].append(test_data.classes[i][0].item())
+        ts_data['subjects'].append(test_data.subjects[i][0].item())
+        total.append(1.0)
+        continue
+    sb, se = detect_segments(test_data.data[i], mu + 3 * sigma)
+    ts_data['data'].append(test_data.data[i][sb:se])
+    ts_data['classes'].append(test_data.classes[i][0].item())
+    ts_data['subjects'].append(test_data.subjects[i][0].item())
+    test_data_standard.data[i] = test_data.data[i][sb:se]
+    test_data_standard.reps[i] = test_data.reps[i][sb:se]
+    test_data_standard.classes[i] = test_data.classes[i][sb:se]
+    test_data_standard.subjects[i] = test_data.subjects[i][sb:se]
+    total.append(len(test_data.data[i][sb:se]) / len(test_data.data[i]))
+
+def window_dataset(data, window, stride) :
+
+    data, gestures, subjects = data['data'], data['classes'], data['subjects']
+
+    X_chunks = []
+    y_gesture = []
+    y_subject = []
+    y_rep = []
+
+    for i in range(len(data)):
+        # if i % 10000 == 0:
+        #     print(i / len(data))
+        win_len = window
+        stride_len = stride
+
+        T = data[i].shape[0]
+
+        if T < window:
+            continue
+
+        starts = np.arange(0, T - win_len + 1, stride_len)
+        idx = starts[:, None] + np.arange(win_len)[None, :]
+
+        windows = data[i][idx]  # [n_win, win_len, 8]
+        windows = windows.reshape((-1, CH, SEQ))
+
+        n_win = windows.shape[0]
+
+        X_chunks.append(windows.astype(np.float32))
+        y_gesture.append(np.full(n_win, gestures[i], dtype=np.int64))
+        y_subject.append(np.full(n_win, subjects[i], dtype=np.int64))
+        # y_rep.append(np.full(n_win, train_data.reps[i][0].item(), dtype=np.int64))
+
+    X = X_chunks
+    meta = {
+        "classes": np.concatenate(y_gesture),
+        "subjects": np.concatenate(y_subject),}
+        # "rep": np.concatenate(y_rep),}
+
+    return X, meta
+
+X, meta = window_dataset(t_data, SEQ, INC)
+X = np.concatenate(X, axis=0) 
+y = meta
+
+np.save(join(PICKLE_PATH, 'train_windows_standard'), X.astype(DTYPE))
+np.save(join(PICKLE_PATH, 'train_meta_standard'), y)
+
+del X, y
+gc.collect()
+
+X_v, meta = window_dataset(v_data, SEQ, INC)
+X_v = np.concatenate(X_v, axis=0) 
+y_v = meta
+
+X_t, meta = window_dataset(ts_data, SEQ, INC)
+X_t = np.concatenate(X_t, axis=0) 
+y_t = meta
+
+np.save(join(PICKLE_PATH, 'val_windows_standard'), X_v.astype(DTYPE))
+np.save(join(PICKLE_PATH, 'val_meta_standard'), y_v)
+np.save(join(PICKLE_PATH, 'test_windows_standard'), X_t.astype(DTYPE))
+np.save(join(PICKLE_PATH, 'test_meta_standard'), y_t)
+
+np.save(join(PICKLE_PATH, 'train_data_standard'), train_data_standard)
+np.save(join(PICKLE_PATH, 'val_data_standard'), val_data_standard)
+np.save(join(PICKLE_PATH, 'test_data_standard'), test_data_standard)
+
+print(np.mean(total))
 
 
 print('DONE.')
