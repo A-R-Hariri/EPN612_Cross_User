@@ -56,6 +56,13 @@ test_meta_segmented = np.load(join(PICKLE_PATH, 'test_meta_segmented.npy'), allo
 test_windows_relabeled = np.load(join(PICKLE_PATH, 'test_windows_relabeled.npy'), mmap_mode=MMAP_MODE)
 test_meta_relabeled = np.load(join(PICKLE_PATH, 'test_meta_relabeled.npy'), allow_pickle=True).item()
 
+train_windows_standard = np.load(join(PICKLE_PATH, 'train_windows_standard.npy'), mmap_mode=MMAP_MODE)
+train_meta_standard = np.load(join(PICKLE_PATH, 'train_meta_standard.npy'), allow_pickle=True).item()
+val_windows_standard = np.load(join(PICKLE_PATH, 'val_windows_standard.npy'), mmap_mode=MMAP_MODE)
+val_meta_standard = np.load(join(PICKLE_PATH, 'val_meta_standard.npy'), allow_pickle=True).item()
+test_windows_standard = np.load(join(PICKLE_PATH, 'test_windows_standard.npy'), mmap_mode=MMAP_MODE)
+test_meta_standard = np.load(join(PICKLE_PATH, 'test_meta_standard.npy'), allow_pickle=True).item()
+
 
 # ======== PIPELINE ========
 # train_loader = create_loader(train_windows, train_meta['classes'], 
@@ -96,6 +103,20 @@ test_loader_relabeled = create_loader(test_windows_relabeled,
                             test_meta_relabeled['classes'],
                             batch=BATCH_SIZE, shuffle=False)
 
+# train_loader_standard = create_loader(train_windows_standard, 
+#                             train_meta_standard['classes'],
+#                             batch=BATCH_SIZE, shuffle=True)
+# train_loader_standard_grl = create_loader_grl(train_windows_standard, 
+#                             train_meta_standard['classes'],
+#                             train_meta_standard['subjects'],
+#                             batch=BATCH_SIZE, shuffle=True)
+# val_loader_standard = create_loader(val_windows_standard, 
+#                             val_meta_standard['classes'],
+#                             batch=BATCH_SIZE, shuffle=False)
+test_loader_standard = create_loader(test_windows_standard, 
+                            test_meta_standard['classes'],
+                            batch=BATCH_SIZE, shuffle=False)
+
 weights = torch.tensor(compute_class_weight('balanced', 
                                classes=np.arange(CLASSES), 
                                 y=train_meta_segmented['classes']),
@@ -103,194 +124,238 @@ weights = torch.tensor(compute_class_weight('balanced',
                                 device=DEVICE)
 
 
-NAME = "cnn_segmented"
+# NAME = "cnn_segmented"
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=nn.CrossEntropyLoss(weight=weights),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnn_segmented_nw"
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=nn.CrossEntropyLoss(weight=None),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnn_segmented_eq"
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=EqLoss(weight=weights),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnn_segmented_eq_nw"
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=EqLoss(weight=None),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnn_segmented_cvar"
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=CVaRLoss(weight=weights),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnn_segmented_cvar_nw"
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=CVaRLoss(weight=None),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnn_segmented_rest"    
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=RestLoss(1.0, 1.0, weight=weights),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnn_segmented_rest_nw"    
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=RestLoss(1.0, 1.0, weight=None),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnn_segmented_grl"
+# model = CNN_GRL()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train_grl(model=model, name=NAME, 
+#       train_loader=train_loader_segmented_grl,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=nn.CrossEntropyLoss(weight=weights),
+#       loss_fn_grl=nn.CrossEntropyLoss(),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+# NAME = "cnn_segmented_grl_nw"
+# model = CNN_GRL()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train_grl(model=model, name=NAME, 
+#       train_loader=train_loader_segmented_grl,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=nn.CrossEntropyLoss(weight=None),
+#       loss_fn_grl=nn.CrossEntropyLoss(),
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled})
+
+
+NAME = "cnn_segmented_proto"
 model = CNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 train(model=model, name=NAME, 
       train_loader=train_loader_segmented,
       val_loader=val_loader_segmented, 
-      loss_fn=nn.CrossEntropyLoss(weight=weights),
+      loss_fn=PrototypeLoss(weight=weights),
+      return_emb=True, return_logits=True,
       save_chkp=SAVE_CHKP)
 torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
 # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
 eval_test(model=model, name=NAME, 
           loaders={'raw': test_loader, 
                    'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
+                   'relabeled': test_loader_relabeled,
+                   'standard': test_loader_standard},
            metas={'raw': test_meta, 
                   'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
+                  'relabeled': test_meta_relabeled,
+                  'standard': test_meta_standard})
 
 
-NAME = "cnn_segmented_nw"
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_segmented,
-      val_loader=val_loader_segmented, 
-      loss_fn=nn.CrossEntropyLoss(weight=None),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnn_segmented_eq"
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_segmented,
-      val_loader=val_loader_segmented, 
-      loss_fn=EqLoss(weight=weights),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnn_segmented_eq_nw"
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_segmented,
-      val_loader=val_loader_segmented, 
-      loss_fn=EqLoss(weight=None),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnn_segmented_cvar"
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_segmented,
-      val_loader=val_loader_segmented, 
-      loss_fn=CVaRLoss(weight=weights),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnn_segmented_cvar_nw"
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_segmented,
-      val_loader=val_loader_segmented, 
-      loss_fn=CVaRLoss(weight=None),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnn_segmented_rest"    
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_segmented,
-      val_loader=val_loader_segmented, 
-      loss_fn=RestLoss(1.0, 1.0, weight=weights),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnn_segmented_rest_nw"    
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_segmented,
-      val_loader=val_loader_segmented, 
-      loss_fn=RestLoss(1.0, 1.0, weight=None),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnn_segmented_grl"
-model = CNN_GRL()
-print(model, f"\nParameters count: {count_params(model):,}")
-train_grl(model=model, name=NAME, 
-      train_loader=train_loader_segmented_grl,
-      val_loader=val_loader_segmented, 
-      loss_fn=nn.CrossEntropyLoss(weight=weights),
-      loss_fn_grl=nn.CrossEntropyLoss(),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = "cnn_segmented_grl_nw"
-model = CNN_GRL()
-print(model, f"\nParameters count: {count_params(model):,}")
-train_grl(model=model, name=NAME, 
-      train_loader=train_loader_segmented_grl,
-      val_loader=val_loader_segmented, 
-      loss_fn=nn.CrossEntropyLoss(weight=None),
-      loss_fn_grl=nn.CrossEntropyLoss(),
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'relabeled': test_meta_relabeled})
+# NAME = "cnn_segmented_proto_nw"
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_segmented,
+#       val_loader=val_loader_segmented, 
+#       loss_fn=PrototypeLoss(weight=None),
+#       return_emb=True, return_logits=True,
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'relabeled': test_loader_relabeled,
+#                    'standard': test_loader_standard},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'relabeled': test_meta_relabeled,
+#                   'standard': test_meta_standard})
 

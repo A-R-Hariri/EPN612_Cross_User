@@ -375,21 +375,21 @@ eval_test(model=model, name=NAME,
                   'standard': test_meta_standard})
 
 
-NAME = "cnn_standard_proto_nw"
-model = CNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-train(model=model, name=NAME, 
-      train_loader=train_loader_standard,
-      val_loader=val_loader_standard, 
-      loss_fn=PrototypeLoss(weight=None),
-      return_emb=True, return_logits=True,
-      save_chkp=SAVE_CHKP)
-torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader, 
-                   'segmented': test_loader_segmented, 
-                   'standard': test_loader_standard},
-           metas={'raw': test_meta, 
-                  'segmented': test_meta_segmented, 
-                  'standard': test_meta_standard})
+# NAME = "cnn_standard_proto_nw"
+# model = CNN()
+# print(model, f"\nParameters count: {count_params(model):,}")
+# train(model=model, name=NAME, 
+#       train_loader=train_loader_standard,
+#       val_loader=val_loader_standard, 
+#       loss_fn=PrototypeLoss(weight=None),
+#       return_emb=True, return_logits=True,
+#       save_chkp=SAVE_CHKP)
+# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+# eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader, 
+#                    'segmented': test_loader_segmented, 
+#                    'standard': test_loader_standard},
+#            metas={'raw': test_meta, 
+#                   'segmented': test_meta_segmented, 
+#                   'standard': test_meta_standard})
