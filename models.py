@@ -51,13 +51,14 @@ class MLP(nn.Module):
         return logits
     
 
-class CNNBaseline(nn.Module):
+class CNNBasic(nn.Module):
     def __init__(self, ch=CH, num_classes=CLASSES, dropout=DROPOUT):
         super().__init__()
 
-        self.conv1 = nn.Conv1d(ch, 64, 4, padding="same")
-        self.conv2 = nn.Conv1d(64, 128, 3, padding="same")
-        self.conv3 = nn.Conv1d(128, 128, 3, padding="same")
+        self.conv1 = nn.Conv1d(ch, 32, 4, padding="same")
+        self.conv2 = nn.Conv1d(32, 64, 4, padding="same")
+        self.conv3 = nn.Conv1d(64, 96, 4, padding="same")
+        self.conv4 = nn.Conv1d(96, 128, 4, padding="same")
 
         self.pool = nn.AdaptiveAvgPool1d(1)
 
@@ -75,6 +76,7 @@ class CNNBaseline(nn.Module):
         x = self.drop(self.relu(self.conv1(x)))
         x = self.drop(self.relu(self.conv2(x)))
         x = self.drop(self.relu(self.conv3(x)))
+        x = self.drop(self.relu(self.conv4(x)))
 
         x = self.pool(x).squeeze(-1)
 
@@ -385,10 +387,7 @@ class TripletLoss(nn.Module):
         self.w_soft = w_soft
         self.normalize = normalize
         self.triplet = nn.TripletMarginLoss(
-            margin=margin,
-            p=2,
-            reduction="mean"
-        )
+            margin=margin, p=2, reduction="mean")
 
     def _batch_hard(self, z, pos_mask, neg_mask):
         dist = 1 - torch.matmul(z, z.T)
@@ -441,7 +440,7 @@ class TripletLoss(nn.Module):
             loss += self.w_soft * self._batch_hard(z, pos_soft, neg_soft)
             denom += abs(self.w_soft)
 
-        return loss / max(denom, 1e-12)
+        return loss / denom
 
 
 class PrototypeLoss(nn.Module):
@@ -475,6 +474,67 @@ class PrototypeLoss(nn.Module):
 
         if count > 0:
             proto_loss = proto_loss / count
+
+        loss = (1 - self.lambda_proto) * ce + self.lambda_proto * proto_loss
+
+        return loss
+
+
+class OneVsAllLoss(nn.Module):
+    def __init__(self, lambda_proto=0.5, normalize=True, weight=None):
+        super().__init__()
+        self.lambda_proto = lambda_proto
+        self.normalize = normalize
+        self.ce = nn.CrossEntropyLoss(weight=weight)
+
+    def forward(self, emb, logits, labels):
+        if self.normalize:
+            emb = F.normalize(emb, dim=1)
+
+        ce = self.ce(logits, labels)
+        classes = torch.unique(labels)
+        proto_loss = 0.0
+
+        if len(classes) == 0:
+            pass
+        elif len(classes) == 1:
+            c = classes[0]
+            mask = labels == c
+            z = emb[mask]
+            if z.size(0) > 1:
+                proto = z.mean(dim=0, keepdim=True)
+                proto_loss = ((z - proto) ** 2).sum(dim=1).mean()
+        else:
+            # Multiple classes → full prototype loss:
+            #   - distance to own class mean  → lower loss when closer
+            #   - distance to every other class mean → lower loss when farther
+            # This is equivalent to a one-vs-all style softmax over negative distances
+            # (standard prototypical / metric-learning loss)
+            proto_list = []
+            class_to_idx = {}
+            for idx, c in enumerate(classes):
+                mask = labels == c
+                z = emb[mask]
+                proto = z.mean(dim=0)                     # (D,)
+                proto_list.append(proto)
+                class_to_idx[c.item()] = idx
+
+            protos = torch.stack(proto_list, dim=0)       # (K, D) where K = #classes in batch
+
+            # Squared Euclidean distances from every embedding to every prototype
+            # shape: (N, K)
+            dists = ((emb.unsqueeze(1) - protos.unsqueeze(0)) ** 2).sum(dim=-1)
+
+            target_idx = torch.tensor(
+                [class_to_idx[l.item()] for l in labels],
+                dtype=torch.long,
+                device=labels.device)
+
+            # Proto loss = CrossEntropy( -distances, true_class )
+            # → minimizing this simultaneously:
+            #     • pulls each sample toward its own class mean (closer = lower loss)
+            #     • pushes each sample away from all other class means (farther = lower loss)
+            proto_loss = F.cross_entropy(-dists, target_idx)
 
         loss = (1 - self.lambda_proto) * ce + self.lambda_proto * proto_loss
 
