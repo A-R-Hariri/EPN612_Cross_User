@@ -820,6 +820,8 @@ def eval_test(model, loaders, metas, name,
         plt.close(fig)
 
         if save:
+            os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)
+            os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
             np.save(f"{CHECKPOINT_PATH}/{name}/acc_{tag}.npy", acc)
             np.save(f"{CHECKPOINT_PATH}/{name}/aer_{tag}.npy", act_acc)
 
