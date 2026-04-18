@@ -359,6 +359,30 @@ class EqLoss(nn.Module):
         equity = class_means.var(unbiased=False) / (class_means.mean() + self.eps)
 
         return mean + self.alpha * equity
+
+
+class PerSubjectLoss(nn.Module):
+    def __init__(self, weight=None):
+        super().__init__()
+        self.ce = nn.CrossEntropyLoss(reduction="none", weight=weight)
+
+    def forward(self, logits, targets, usrs):
+        per_sample = self.ce(logits, targets)
+        uniq, inverse = torch.unique(usrs, return_inverse=True)   # uniq: (N_users,)
+        group_sums = torch.zeros(
+            uniq.numel(),
+            dtype=per_sample.dtype,
+            device=per_sample.device)
+        group_sums.scatter_add_(0, inverse, per_sample)
+        ones = torch.ones_like(per_sample, dtype=torch.long)
+        group_counts = torch.zeros(
+            uniq.numel(),
+            dtype=torch.long,
+            device=per_sample.device)
+        group_counts.scatter_add_(0, inverse, ones)
+        per_subject_mean = group_sums / group_counts.clamp(min=1)
+
+        return per_subject_mean.mean()
     
 
 class CVaRLoss(nn.Module):
