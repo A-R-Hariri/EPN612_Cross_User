@@ -64,11 +64,21 @@ test_loader = create_loader(test_windows, test_meta['classes'],
 
 base_ids = train_meta['subjects']
 
-for i in range(3, 4):
-    rng = np.random.default_rng(SEED + i)
+for i in range(1, 2):
+    fname = f"{CHECKPOINT_PATH}/cnn_raw_within_15/results.npy"
+    res = np.load(fname, allow_pickle=True)
+    df = pd.DataFrame(res.tolist())
+    idx = slice(0, 306)
+    acc_mean = df['acc_mean'][idx]
+    act_mean = df['act_acc_mean'][idx]
+    bal_mean = df['bal_acc_mean'][idx]
+
+    ranked_ids = list(np.argsort(bal_mean))
+    if i:
+        ranked_ids = list(reversed(ranked_ids))
+
     unique_ids = np.arange(306)
-    shuffled_ids = rng.permutation(unique_ids)
-    mapping = dict(zip(unique_ids, shuffled_ids))
+    mapping = dict(zip(unique_ids, ranked_ids))
     train_meta['subjects'] = np.vectorize(mapping.get)(base_ids.copy())
 
     for s in [1, 2, 4, 8, 16, 32, 64, 128, 196, 306]:
@@ -99,7 +109,7 @@ for i in range(3, 4):
 
             eval_test(model=model, name=NAME, save=False,
                 loaders={'raw': test_loader},
-                csv_path=f'grid_{i}.csv',
+                csv_path=f'grid_ranked_{i}.csv',
                 metas={'raw': test_meta})
 
             del train_loader, model
