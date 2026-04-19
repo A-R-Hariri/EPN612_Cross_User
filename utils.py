@@ -129,6 +129,9 @@ class TripletBatchSampler(Sampler):
         self.starts = torch.zeros(K + 1, dtype=torch.long)
         self.starts[1:] = torch.cumsum(self.counts, dim=0)
 
+        # <<< NEW: persistent cursor (this is the only real change) >>>
+        self.cursor = torch.zeros(K, dtype=torch.long)
+
         # Epoch length based on total N (large epochs, no discard)
         self.length = int(self.labels.numel()) // int(self.batch_size)
         if self.length <= 0:
@@ -145,81 +148,75 @@ class TripletBatchSampler(Sampler):
         return self.length
 
     def __iter__(self):
-        # Use a local generator derived from global seed + epoch (no global RNG reset)
-        g = torch.Generator()
-        g.manual_seed(torch.initial_seed() + self.seed_offset + self.epoch)
+            g = torch.Generator()
+            g.manual_seed(torch.initial_seed() + self.seed_offset + self.epoch)
 
-        # Shuffle subjects and iterate in blocks of n_subjects (strict diversity)
-        subj_perm = torch.randperm(self.S, generator=g)
-        subj_ptr = 0
+            subj_perm = torch.randperm(self.S, generator=g)
+            subj_ptr = 0
 
-        # Per-cell cursor for sequential consumption (no toss)
-        K = self.n_classes * self.S
-        cursor = torch.zeros(K, dtype=torch.long)
+            # cursor is now self.cursor (persistent across epochs)
+            # no local "cursor = torch.zeros..."
 
-        def take_from_cell(cell: int) -> torch.Tensor:
-            cnt = int(self.counts[cell].item())
-            if cnt <= 0:
-                # should not happen with your guarantee; fallback is global random
-                ridx = torch.randint(0, self.order.numel(), (self.n_samples,), generator=g)
-                return self.order[ridx]
+            def take_from_cell(cell: int) -> torch.Tensor:
+                cnt = int(self.counts[cell].item())
+                if cnt <= 0:
+                    ridx = torch.randint(0, self.order.numel(), (self.n_samples,), generator=g)
+                    return self.order[ridx]
 
-            p = int(cursor[cell].item())
+                p = int(self.cursor[cell].item())   # ← changed to self.cursor
 
-            # sequential without replacement
-            if p + self.n_samples <= cnt:
-                lo = int(self.starts[cell].item()) + p
-                hi = lo + self.n_samples
+                # sequential without replacement
+                if p + self.n_samples <= cnt:
+                    lo = int(self.starts[cell].item()) + p
+                    hi = lo + self.n_samples
+                    out = self.order[lo:hi]
+                    self.cursor[cell] = p + self.n_samples   # ← changed to self.cursor
+                    return out
+
+                # exhausted: reuse (no toss)
+                if self.reuse_mode == "replacement":
+                    lo0 = int(self.starts[cell].item())
+                    ridx = torch.randint(0, cnt, (self.n_samples,), generator=g)
+                    return self.order[lo0 + ridx]
+
+                # default: random_start contiguous block + pad if needed
+                if cnt > self.n_samples:
+                    p0 = int(torch.randint(0, cnt - self.n_samples + 1, (1,), generator=g).item())
+                else:
+                    p0 = 0
+
+                lo = int(self.starts[cell].item()) + p0
+                hi = lo + min(self.n_samples, cnt)
                 out = self.order[lo:hi]
-                cursor[cell] = p + self.n_samples
+
+                if out.numel() < self.n_samples:
+                    lo0 = int(self.starts[cell].item())
+                    ridx = torch.randint(0, cnt, (self.n_samples - out.numel(),), generator=g)
+                    pad = self.order[lo0 + ridx]
+                    out = torch.cat([out, pad], dim=0)
+
+                self.cursor[cell] = 0   # ← changed to self.cursor
                 return out
 
-            # exhausted: reuse (no toss)
-            if self.reuse_mode == "replacement":
-                # sample within-cell with replacement
-                lo0 = int(self.starts[cell].item())
-                ridx = torch.randint(0, cnt, (self.n_samples,), generator=g)
-                return self.order[lo0 + ridx]
+            batches = 0
+            while batches < self.length:
+                if subj_ptr + self.n_subjects > self.S:
+                    subj_perm = torch.randperm(self.S, generator=g)
+                    subj_ptr = 0
 
-            # default: random_start contiguous block + pad if needed
-            if cnt > self.n_samples:
-                p0 = int(torch.randint(0, cnt - self.n_samples + 1, (1,), generator=g).item())
-            else:
-                p0 = 0
+                selected = subj_perm[subj_ptr:subj_ptr + self.n_subjects]
+                subj_ptr += self.n_subjects
 
-            lo = int(self.starts[cell].item()) + p0
-            hi = lo + min(self.n_samples, cnt)
-            out = self.order[lo:hi]
+                chunks = []
+                for c in range(self.n_classes):
+                    base = c * self.S
+                    for s in selected.tolist():
+                        chunks.append(take_from_cell(base + int(s)))
 
-            if out.numel() < self.n_samples:
-                # cnt < n_samples: pad within-cell (replacement)
-                lo0 = int(self.starts[cell].item())
-                ridx = torch.randint(0, cnt, (self.n_samples - out.numel(),), generator=g)
-                pad = self.order[lo0 + ridx]
-                out = torch.cat([out, pad], dim=0)
-
-            cursor[cell] = 0
-            return out
-
-        batches = 0
-        while batches < self.length:
-            if subj_ptr + self.n_subjects > self.S:
-                subj_perm = torch.randperm(self.S, generator=g)
-                subj_ptr = 0
-
-            selected = subj_perm[subj_ptr:subj_ptr + self.n_subjects]
-            subj_ptr += self.n_subjects
-
-            chunks = []
-            for c in range(self.n_classes):
-                base = c * self.S
-                for s in selected.tolist():
-                    chunks.append(take_from_cell(base + int(s)))
-
-            batch = torch.cat(chunks, dim=0)
-            batch = batch[torch.randperm(batch.numel(), generator=g)]
-            yield batch.tolist()
-            batches += 1
+                batch = torch.cat(chunks, dim=0)
+                batch = batch[torch.randperm(batch.numel(), generator=g)]
+                yield batch.tolist()
+                batches += 1
 
 
 def create_triplet_loader(x, y, subjects, 
@@ -570,9 +567,10 @@ def train_triplet(model, train_loader, val_loader, name,
 
     ep = 1
     while ep <= epochs:
+
         progress = min((ep - 1) / warmup_epochs, 1.0)
-        current_alpha = alpha_start - (alpha_start - alpha_end) * progress
-        current_ce_w = 1.0 - current_alpha
+        current_alpha = alpha_start + (alpha_end - alpha_start) * progress   # 0.0 → 0.2
+        current_ce_w = 1.0 - current_alpha                                   # 1.0 → 0.8
 
         model.train()
         total_loss = torch.tensor(0.0, device=device)
