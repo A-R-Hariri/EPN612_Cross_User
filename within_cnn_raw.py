@@ -39,12 +39,141 @@ test_windows = np.load(join(PICKLE_PATH, 'test_windows.npy'), mmap_mode=MMAP_MOD
 test_meta = np.load(join(PICKLE_PATH, 'test_meta.npy'), allow_pickle=True).item()
 
 
-# Within
 REPS = sys.argv[2].split(',') if len(sys.argv) > 2 else 15
 REPS = list(map(int, REPS))
 
 for rep in REPS:
-    NAME = f'cnn_raw_within_{rep}'
+
+    # # Within
+    # NAME = f'cnn_raw_within_{rep}'
+    # results = []
+
+    # ranges = [(0, 306), (306, 332), (332, 612)]
+    # data_list = [train_data, val_data, test_data]
+
+    # for d, r in enumerate(ranges):
+    #     for i in range(*r):
+    #         print(i)
+
+    #         data_s = data_list[d].isolate_data("subjects", [i], fast=True)
+
+    #         data = data_s.isolate_data("reps", list(range(rep)), fast=True)
+    #         train_windows, train_meta = data.parse_windows(SEQ, INC)
+
+    #         data = data_s.isolate_data("reps", list(range(15, 20)), fast=True)
+    #         val_windows, val_meta = data.parse_windows(SEQ, INC)
+
+    #         data = data_s.isolate_data("reps", list(range(20, 25)), fast=True)
+    #         test_windows, test_meta = data.parse_windows(SEQ, INC)
+
+    #         weights = torch.tensor(compute_class_weight('balanced', 
+    #                                     classes=np.arange(CLASSES), 
+    #                                         y=train_meta['classes']),
+    #                                         dtype=torch.float32,
+    #                                         device=DEVICE)
+
+    #         train_loader = create_loader(train_windows, train_meta['classes'], 
+    #                                     batch=BATCH_SIZE, shuffle=True, 
+    #                                     workers=WORKERS, persistent_workers=PRESIST_WORKER)
+    #         val_loader = create_loader(val_windows, val_meta['classes'], 
+    #                                     batch=BATCH_SIZE, shuffle=False, 
+    #                                     workers=WORKERS, persistent_workers=PRESIST_WORKER)
+    #         test_loader = create_loader(test_windows, test_meta['classes'], 
+    #                                     batch=BATCH_SIZE, shuffle=False, 
+    #                                     workers=WORKERS, persistent_workers=PRESIST_WORKER)
+
+    #         model = CNN()
+    #         weights = torch.tensor(compute_class_weight('balanced', 
+    #                                     classes=np.arange(CLASSES), 
+    #                                         y=train_meta['classes']),
+    #                                         dtype=torch.float32,
+    #                                         device=DEVICE)
+    #         train(model=model, name=NAME, 
+    #             train_loader=train_loader,
+    #             val_loader=val_loader,
+    #             loss_fn=nn.CrossEntropyLoss(weight=weights),
+    #             save_chkp=SAVE_CHKP, verbose=VERBOSE)
+    #         _result = eval_within(model=model,
+    #                             loader=test_loader,
+    #                             meta=test_meta)
+    #         results.append(_result)
+    #         print(_result['acc_mean'])
+
+    #         del train_loader, val_loader, test_loader, model
+    #         torch.cuda.empty_cache()
+    #         gc.collect()
+
+    # os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)
+    # os.makedirs(f"{CHECKPOINT_PATH}/{NAME}/", exist_ok=True)
+    # np.save(f"{CHECKPOINT_PATH}/{NAME}/results.npy", results)
+
+    # Within Eq
+    if rep != 1:
+        NAME = f'cnn_raw_within_eq_{rep}'
+        results = []
+
+        ranges = [(0, 306), (306, 332), (332, 612)]
+        data_list = [train_data, val_data, test_data]
+
+        for d, r in enumerate(ranges):
+            for i in range(*r):
+                print(i)
+
+                data_s = data_list[d].isolate_data("subjects", [i], fast=True)
+
+                data = data_s.isolate_data("reps", list(range(rep)), fast=True)
+                train_windows, train_meta = data.parse_windows(SEQ, INC)
+
+                data = data_s.isolate_data("reps", list(range(15, 20)), fast=True)
+                val_windows, val_meta = data.parse_windows(SEQ, INC)
+
+                data = data_s.isolate_data("reps", list(range(20, 25)), fast=True)
+                test_windows, test_meta = data.parse_windows(SEQ, INC)
+
+                weights = torch.tensor(compute_class_weight('balanced', 
+                                            classes=np.arange(CLASSES), 
+                                                y=train_meta['classes']),
+                                                dtype=torch.float32,
+                                                device=DEVICE)
+
+                train_loader = create_loader(train_windows, train_meta['classes'], 
+                                            batch=BATCH_SIZE, shuffle=True, 
+                                            workers=WORKERS, persistent_workers=PRESIST_WORKER)
+                val_loader = create_loader(val_windows, val_meta['classes'], 
+                                            batch=BATCH_SIZE, shuffle=False, 
+                                            workers=WORKERS, persistent_workers=PRESIST_WORKER)
+                test_loader = create_loader(test_windows, test_meta['classes'], 
+                                            batch=BATCH_SIZE, shuffle=False, 
+                                            workers=WORKERS, persistent_workers=PRESIST_WORKER)
+
+                model = CNN()
+                weights = torch.tensor(compute_class_weight('balanced', 
+                                            classes=np.arange(CLASSES), 
+                                                y=train_meta['classes']),
+                                                dtype=torch.float32,
+                                                device=DEVICE)
+                train(model=model, name=NAME, 
+                    train_loader=train_loader,
+                    val_loader=val_loader,
+                    loss_fn=EqLoss(weight=weights),
+                    save_chkp=SAVE_CHKP, verbose=VERBOSE)
+                _result = eval_within(model=model,
+                                    loader=test_loader,
+                                    meta=test_meta)
+                results.append(_result)
+                print(_result['acc_mean'])
+
+                del train_loader, val_loader, test_loader, model
+                torch.cuda.empty_cache()
+                gc.collect()
+
+        os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)
+        os.makedirs(f"{CHECKPOINT_PATH}/{NAME}/", exist_ok=True)
+        np.save(f"{CHECKPOINT_PATH}/{NAME}/results.npy", results)
+
+
+    # Within CVaR
+    NAME = f'cnn_raw_within_cvar_{rep}'
     results = []
 
     ranges = [(0, 306), (306, 332), (332, 612)]
@@ -90,7 +219,71 @@ for rep in REPS:
             train(model=model, name=NAME, 
                 train_loader=train_loader,
                 val_loader=val_loader,
-                loss_fn=nn.CrossEntropyLoss(weight=weights),
+                loss_fn=CVaRLoss(weight=weights),
+                save_chkp=SAVE_CHKP, verbose=VERBOSE)
+            _result = eval_within(model=model,
+                                loader=test_loader,
+                                meta=test_meta)
+            results.append(_result)
+            print(_result['acc_mean'])
+
+            del train_loader, val_loader, test_loader, model
+            torch.cuda.empty_cache()
+            gc.collect()
+
+    os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)
+    os.makedirs(f"{CHECKPOINT_PATH}/{NAME}/", exist_ok=True)
+    np.save(f"{CHECKPOINT_PATH}/{NAME}/results.npy", results)
+
+
+    # Within Rest
+    NAME = f'cnn_raw_within_rest_{rep}'
+    results = []
+
+    ranges = [(0, 306), (306, 332), (332, 612)]
+    data_list = [train_data, val_data, test_data]
+
+    for d, r in enumerate(ranges):
+        for i in range(*r):
+            print(i)
+
+            data_s = data_list[d].isolate_data("subjects", [i], fast=True)
+
+            data = data_s.isolate_data("reps", list(range(rep)), fast=True)
+            train_windows, train_meta = data.parse_windows(SEQ, INC)
+
+            data = data_s.isolate_data("reps", list(range(15, 20)), fast=True)
+            val_windows, val_meta = data.parse_windows(SEQ, INC)
+
+            data = data_s.isolate_data("reps", list(range(20, 25)), fast=True)
+            test_windows, test_meta = data.parse_windows(SEQ, INC)
+
+            weights = torch.tensor(compute_class_weight('balanced', 
+                                        classes=np.arange(CLASSES), 
+                                            y=train_meta['classes']),
+                                            dtype=torch.float32,
+                                            device=DEVICE)
+
+            train_loader = create_loader(train_windows, train_meta['classes'], 
+                                        batch=BATCH_SIZE, shuffle=True, 
+                                        workers=WORKERS, persistent_workers=PRESIST_WORKER)
+            val_loader = create_loader(val_windows, val_meta['classes'], 
+                                        batch=BATCH_SIZE, shuffle=False, 
+                                        workers=WORKERS, persistent_workers=PRESIST_WORKER)
+            test_loader = create_loader(test_windows, test_meta['classes'], 
+                                        batch=BATCH_SIZE, shuffle=False, 
+                                        workers=WORKERS, persistent_workers=PRESIST_WORKER)
+
+            model = CNN()
+            weights = torch.tensor(compute_class_weight('balanced', 
+                                        classes=np.arange(CLASSES), 
+                                            y=train_meta['classes']),
+                                            dtype=torch.float32,
+                                            device=DEVICE)
+            train(model=model, name=NAME, 
+                train_loader=train_loader,
+                val_loader=val_loader,
+                loss_fn=RestLoss(1.0, 1.0, weight=weights),
                 save_chkp=SAVE_CHKP, verbose=VERBOSE)
             _result = eval_within(model=model,
                                 loader=test_loader,
