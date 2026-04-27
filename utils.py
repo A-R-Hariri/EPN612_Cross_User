@@ -26,7 +26,7 @@ DTYPE = np.float32
 PICKLE_PATH = 'pickles'; CHECKPOINT_PATH = 'checkpoints'; FIGURE_PATH = 'figures'
 SEQ = 40; INC = 2; CH = 8; CLASSES = 5; VAL_CUTOFF = 332
 WORKERS = 4; PRE_FETCH = 2; VERBOSE=True; DEVICE = 'cuda'
-UPDATE_EVERY = 50; PRESIST_WORKER = True; PIN_MEMORY = True
+UPDATE_EVERY = 50; PRESIST_WORKER = False; PIN_MEMORY = True
 
 EPOCHS = 200; BATCH_SIZE = 512; DROPOUT = 0.2; PATIENCE = 10
 LR_FACTOR = 0.6; LR_PATIENCE = 4; LR_INIT = 1e-4; LR_MIN = 1e-5
@@ -746,7 +746,9 @@ def run_pca_sweep(model, loader, name, device=DEVICE):
     # If memory is an issue, fit PCA only on the last epoch's embeddings
     all_epoch_data = []
     
-    for f in files:
+    for i, f in enumerate(files):
+        print(i / len(files))
+        
         ep_path = os.path.join(checkpoint_dir, f)
         checkpoint = torch.load(ep_path, map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
@@ -946,6 +948,8 @@ def eval_test(model, loaders, metas, name,
             os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
             np.save(f"{CHECKPOINT_PATH}/{name}/acc_{tag}.npy", acc)
             np.save(f"{CHECKPOINT_PATH}/{name}/aer_{tag}.npy", act_acc)
+            np.save(f"{CHECKPOINT_PATH}/{name}/results.npy", 
+                    np.stack((acc, act_acc, bal_acc)))
 
         return {"acc_mean": acc.mean(), "acc_std": acc.std(),
                 "act_acc_mean": act_acc.mean(), "act_acc_std": act_acc.std(),
@@ -1116,8 +1120,10 @@ def eval_test_lda(model, X, metas, name, save=True):
         if save:
             os.makedirs(f"{CHECKPOINT_PATH}", exist_ok=True)
             os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
-            np.save(f"{CHECKPOINT_PATH}/{name}/acc_{tag}.npy", acc)
-            np.save(f"{CHECKPOINT_PATH}/{name}/aer_{tag}.npy", act_acc)
+            # np.save(f"{CHECKPOINT_PATH}/{name}/acc_{tag}.npy", acc)
+            # np.save(f"{CHECKPOINT_PATH}/{name}/aer_{tag}.npy", act_acc)
+            np.save(f"{CHECKPOINT_PATH}/{name}/results.npy", 
+                    np.stack((acc, act_acc, bal_acc)))
 
         return {"acc_mean": acc.mean(), "acc_std": acc.std(),
                 "act_acc_mean": act_acc.mean(), "act_acc_std": act_acc.std(),
