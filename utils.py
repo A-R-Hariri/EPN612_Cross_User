@@ -334,7 +334,7 @@ def train(model, train_loader, val_loader, name,
 
 def train_grl(model, train_loader, val_loader, name,
             loss_fn=nn.CrossEntropyLoss(),
-            loss_fn_grl=None,
+            loss_fn_sbj=None,
             return_emb=False, return_logits=False,
             grl_weight=1.0, ramp_epochs=50,
             epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
@@ -382,7 +382,7 @@ def train_grl(model, train_loader, val_loader, name,
             with autocast(device_type="cuda", enabled=(device=="cuda")):
                 logits, logits_grl = model(xb, return_grl=True)
                 loss_c = loss_fn(logits, yb)
-                loss_grl = loss_fn_grl(logits_grl, ysb)
+                loss_grl = loss_fn_sbj(logits_grl, ysb)
                 loss = loss_c + grl_weight * loss_grl
 
             scaler.scale(loss).backward()
