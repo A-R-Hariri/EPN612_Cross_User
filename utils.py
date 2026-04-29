@@ -27,6 +27,7 @@ PICKLE_PATH = 'pickles'; CHECKPOINT_PATH = 'checkpoints'; FIGURE_PATH = 'figures
 SEQ = 40; INC = 2; CH = 8; CLASSES = 5; VAL_CUTOFF = 332
 WORKERS = 4; PRE_FETCH = 2; VERBOSE=True; DEVICE = 'cuda'
 UPDATE_EVERY = 50; PRESIST_WORKER = False; PIN_MEMORY = True
+RESULTS_PATH = f"{FIGURE_PATH}/results.csv"
 
 EPOCHS = 200; BATCH_SIZE = 512; DROPOUT = 0.2; PATIENCE = 10
 LR_FACTOR = 0.6; LR_PATIENCE = 4; LR_INIT = 1e-4; LR_MIN = 1e-5
@@ -872,7 +873,7 @@ def evaluate_triplet(model, loader, loss_fn,
 @torch.no_grad()
 def eval_test(model, loaders, metas, name,
               save=True, multi_head=None,
-              csv_path = f"{FIGURE_PATH}/results.csv",
+              csv_path = RESULTS_PATH,
               device=DEVICE):
 
     model.to(device)
