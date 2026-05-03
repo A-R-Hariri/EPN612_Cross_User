@@ -100,7 +100,7 @@ class TripletBatchSampler(Sampler):
             raise ValueError("n_classes must be >= 2.")
 
         # n_samples inferred from nominal batch_size
-        self.n_samples = max(2, int(batch_size) // (self.n_classes * self.n_subjects))
+        self.n_samples = max(3, int(batch_size) // (self.n_classes * self.n_subjects))
         self.batch_size = self.n_classes * self.n_subjects * self.n_samples
 
         # Remap subjects to 0..S-1 (handles train 0..305 and test 305..611 cleanly)
