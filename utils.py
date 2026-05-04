@@ -1,7 +1,7 @@
 import os, copy, time, math
 import numpy as np, pandas as pd
 import matplotlib.pyplot as plt
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix, f1_score
 
 import torch;
 import torch.nn as nn; import torch.nn.functional as F
@@ -546,12 +546,12 @@ def train_sbj(model, train_loader, val_loader, name,
 
 
 def train_triplet(model, train_loader, val_loader, name,
-          epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
-          criterion_ce=nn.CrossEntropyLoss(), criterion_tri=None,
-          lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, 
-          patience=PATIENCE, device=DEVICE, verbose=VERBOSE,
-          alpha_start=0.0, alpha_end=0.2, warmup_epochs=20,
-          save_chkp=False):
+                  criterion_ce=nn.CrossEntropyLoss(), criterion_tri=None,
+                  epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
+                  lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, 
+                  patience=PATIENCE, device=DEVICE, verbose=VERBOSE,
+                  alpha_start=0.0, alpha_end=0.2, warmup_epochs=20,
+                  save_chkp=False):
 
     model.to(device)
     opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)
@@ -570,8 +570,11 @@ def train_triplet(model, train_loader, val_loader, name,
     while ep <= epochs:
 
         progress = min((ep - 1) / warmup_epochs, 1.0)
-        current_alpha = alpha_start + (alpha_end - alpha_start) * progress   # 0.0 → 0.2
-        current_ce_w = 1.0 - current_alpha                                   # 1.0 → 0.8
+        sig = 1 / (1 + math.exp(-10 * (progress - 0.65)))  # inflection at 65% of warmup
+        sig_0 = 1 / (1 + math.exp(-10 * (0 - 0.65)))
+        sig_1 = 1 / (1 + math.exp(-10 * (1 - 0.65)))
+        current_alpha = alpha_start + (alpha_end - alpha_start) * (sig - sig_0) / (sig_1 - sig_0)
+        current_ce_w = 1.0 - current_alpha
 
         model.train()
         total_loss = torch.tensor(0.0, device=device)
