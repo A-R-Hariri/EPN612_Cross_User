@@ -335,6 +335,27 @@ class RestLoss(nn.Module):
         return loss.mean()
 
 
+class ActiveLoss(nn.Module):
+    def __init__(self, alpha1=1.0, alpha2=0.0, weight=None):
+        super().__init__()
+        self.ce = nn.CrossEntropyLoss(reduction='none', 
+                                      weight=weight)
+        self.alpha1 = alpha1
+        self.alpha2 = alpha2
+
+    def forward(self, logits, targets):
+        loss = self.ce(logits, targets)
+        pred = logits.argmax(1)
+
+        p1 = (targets != 0) | (pred != 0)
+        loss = loss * (1 + self.alpha1 * p1.float())
+
+        p2 = (targets == 0)
+        loss = loss * (1 + self.alpha2 * p2.float())
+
+        return loss.mean()
+
+
 class EqLoss(nn.Module):
     def __init__(self, alpha=0.3, eps=1e-8, weight=None):
         super().__init__()
