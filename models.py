@@ -315,7 +315,7 @@ class CNN_GRL(nn.Module):
 
 # ======== LOSSES ========
 class RestLoss(nn.Module):
-    def __init__(self, alpha1=0.25, alpha2=0.5, weight=None):
+    def __init__(self, alpha1=1.0, alpha2=1.0, weight=None):
         super().__init__()
         self.ce = nn.CrossEntropyLoss(reduction='none', 
                                       weight=weight)
