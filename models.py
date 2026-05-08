@@ -606,3 +606,91 @@ class OneVsAllLoss(nn.Module):
         loss = (1 - self.lambda_proto) * ce + self.lambda_proto * proto_loss
 
         return loss
+
+
+class TripletLoss(nn.Module):
+    def __init__(self, margin=0.5, w_hard=1.0, w_soft=0.0,
+                 batch_hard=True, normalize=True):
+        super().__init__()
+        self.margin = margin
+        self.w_hard = w_hard
+        self.w_soft = w_soft
+        self.normalize = normalize
+        self.bacth_hard = batch_hard
+        self.triplet = nn.TripletMarginWithDistanceLoss(
+            distance_function=lambda x, y: 1.0 - F.cosine_similarity(x, y),
+            margin=margin,
+            reduction="mean"
+        )
+
+    def _batch_random(self, z, pos_mask, neg_mask):
+        valid = pos_mask.any(dim=1) & neg_mask.any(dim=1)
+ 
+        if valid.sum() == 0:
+            return z.sum() * 0.0  # safe zero with grad
+ 
+        p_idx = torch.multinomial(pos_mask[valid].float(), 1).squeeze(1)
+        n_idx = torch.multinomial(neg_mask[valid].float(), 1).squeeze(1)
+
+        a = z[valid]
+        p = z[p_idx]
+        n = z[n_idx]
+ 
+        return self.triplet(a, p, n)
+
+    def _batch_hard(self, z, pos_mask, neg_mask):
+        dist = 1 - torch.matmul(z, z.T)
+
+        pos_dist = dist.masked_fill(~pos_mask, float("-inf"))
+        neg_dist = dist.masked_fill(~neg_mask, float("inf"))
+
+        p_idx = pos_dist.argmax(dim=1)
+        n_idx = neg_dist.argmin(dim=1)
+
+        valid = pos_mask.any(dim=1) & neg_mask.any(dim=1)
+
+        if valid.sum() == 0:
+            return z.sum() * 0.0  # safe zero with grad
+
+        a = z[valid]
+        p = z[p_idx[valid]]
+        n = z[n_idx[valid]]
+
+        return self.triplet(a, p, n)
+
+    def batch_helper(self, *args, **kwargs):
+        return self._batch_hard(*args, **kwargs) if self.bacth_hard \
+            else self._batch_random(*args, **kwargs)
+
+    def forward(self, z, labels, subjects):
+        if self.normalize:
+            z = F.normalize(z, dim=1)
+
+        labels = labels.unsqueeze(1)
+        subjects = subjects.unsqueeze(1)
+
+        same_class = labels == labels.T
+        diff_class = ~same_class
+        same_subj  = subjects == subjects.T
+        diff_subj  = ~same_subj
+
+        N = labels.size(0)
+        eye = torch.eye(N, dtype=torch.bool, device=z.device)
+
+        pos_hard = same_class & diff_subj & ~eye
+        neg_hard = diff_class & same_subj & ~eye
+
+        loss = torch.tensor(0.0, device=z.device)
+        denom = 0
+
+        if self.w_hard != 0:
+            loss += self.w_hard * self.batch_helper(z, pos_hard, neg_hard)
+            denom += abs(self.w_hard)
+
+        if self.w_soft != 0:
+            pos_soft = same_class & same_subj & ~eye
+            neg_soft = diff_class & diff_subj & ~eye
+            loss += self.w_soft * self.batch_helper(z, pos_soft, neg_soft)
+            denom += abs(self.w_soft)
+
+        return loss / denom
