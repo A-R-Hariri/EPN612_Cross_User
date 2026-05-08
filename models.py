@@ -382,6 +382,31 @@ class EqLoss(nn.Module):
         return mean + self.alpha * equity
 
 
+def _balanced_mean(loss, logits, targets):
+    targets_flat = targets.flatten()
+    losses_flat = loss.flatten()
+    C = logits.size(1)
+    device = logits.device
+    class_loss_sum = torch.zeros(C, device=device).scatter_add(
+        0, targets_flat, losses_flat)
+    class_counts = torch.zeros(C, device=device).scatter_add(
+        0, targets_flat, torch.ones_like(losses_flat))
+    mask = class_counts > 0
+    return (class_loss_sum[mask] / class_counts[mask]).mean()
+
+
+class STDLoss(nn.Module):
+    def __init__(self, alpha=1.0):
+        super().__init__()
+        self.alpha = alpha
+        self.ce = nn.CrossEntropyLoss(reduction="none", weight=None)
+
+    def forward(self, logits, targets):
+        l = self.ce(logits, targets)
+        mean = _balanced_mean(l, logits, targets)
+        return mean + self.alpha * l.std(unbiased=False)
+
+
 class PerSubjectLoss(nn.Module):
     def __init__(self, weight=None):
         super().__init__()
