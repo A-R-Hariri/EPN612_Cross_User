@@ -412,21 +412,20 @@ class PerSubjectLoss(nn.Module):
         super().__init__()
         self.ce = nn.CrossEntropyLoss(reduction="none", weight=weight)
 
-    def forward(self, logits, targets, usrs):
-        per_sample = self.ce(logits, targets)  # (B,)
+    def forward(self, logits, targets, users):
+        loss = self.ce(logits, targets)  # (B,)
+        unique, inverse = torch.unique(users, return_inverse=True)
+        S = unique.size(0)
+        device = logits.device
 
-        uniq, inverse = torch.unique(usrs, return_inverse=True)  # inverse: (B,)
-        num_users = uniq.size(0)
-
-        sum_loss = torch.zeros(num_users, device=logits.device)
-        count = torch.zeros(num_users, device=logits.device)
-
-        sum_loss = sum_loss.scatter_add(0, inverse, per_sample)
-        count = count.scatter_add(0, inverse, torch.ones_like(per_sample))
-
-        mean_per_user = sum_loss / count
-
-        return mean_per_user.mean()
+        loss_sum = torch.zeros(S, device=device).scatter_add(
+            0, inverse, loss)
+        counts = torch.zeros(S, device=device).scatter_add(
+            0, inverse, torch.ones_like(loss))
+        
+        per_user = loss_sum / counts.clamp_min(1)
+        
+        return per_user.mean()
     
 
 class CVaRLoss(nn.Module):
