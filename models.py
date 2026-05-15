@@ -604,3 +604,80 @@ class TripletLoss(nn.Module):
             denom += abs(self.w_soft)
 
         return loss / denom
+
+
+
+class AngularLoss(nn.Module):
+    def __init__(self, temperature=0.07, normalize=True, weight=None, 
+                 nm_label=0, w_ce=1.0, w_supcon=1.0, w_angle=1.0):
+        super().__init__()
+        self.tau = temperature
+        self.normalize = normalize
+        self.ce = nn.CrossEntropyLoss(weight=weight)
+        self.nm_label = nm_label # Explicitly define which label is No Motion
+        
+        # Add weights to balance the loss scales
+        self.w_ce = w_ce
+        self.w_supcon = w_supcon
+        self.w_angle = w_angle
+
+    def forward(self, emb, logits, labels, *args):
+        if self.normalize:
+            emb = F.normalize(emb, dim=1)
+
+        ce_loss = self.ce(logits, labels)
+        classes = torch.unique(labels)
+        angle_loss = torch.tensor(0.0, device=emb.device)
+
+        if len(classes) > 1:
+            proto_list = []
+            class_to_idx = {}
+            for idx, c in enumerate(classes):
+                mask = labels == c
+                z = emb[mask]
+                proto = z.mean(dim=0)
+                proto_list.append(proto)
+                class_to_idx[c.item()] = idx
+
+            protos = torch.stack(proto_list, dim=0)
+
+            # 1. FIX: Safely find the NM prototype
+            if self.nm_label in class_to_idx:
+                nm_idx = class_to_idx[self.nm_label]
+                nm_proto = protos[nm_idx]
+                
+                # Extract only the active classes (exclude NM)
+                active_mask = torch.arange(len(protos)) != nm_idx
+                active_protos = protos[active_mask]
+
+                # 2. FIX: Correctly calculate angular penalty on valid upper triangle
+                if len(active_protos) > 1:
+                    directions = F.normalize(active_protos - nm_proto, dim=1)
+                    cos_sim = directions @ directions.T
+                    
+                    # Extract only the strictly upper triangle elements (no zeros included)
+                    triu_indices = torch.triu_indices(row=cos_sim.size(0), col=cos_sim.size(1), offset=1)
+                    angle_loss = cos_sim[triu_indices[0], triu_indices[1]].mean()
+
+        # --- Supervised Contrastive Loss ---
+        sim = emb @ emb.T / self.tau
+        N = emb.size(0)
+        mask_self = ~torch.eye(N, dtype=torch.bool, device=emb.device)
+        
+        pos_mask = (labels.unsqueeze(1) == labels.unsqueeze(0)) & mask_self
+
+        # 3. FIX: Numerical stability for exponents
+        sim_max, _ = torch.max(sim, dim=1, keepdim=True)
+        sim_stable = sim - sim_max.detach()
+
+        exp_sim = torch.exp(sim_stable) * mask_self
+        log_prob = sim_stable - torch.log(exp_sim.sum(dim=1, keepdim=True) + 1e-8)
+        
+        pos_count = pos_mask.sum(dim=1).clamp(min=1)
+        supcon_loss = -(log_prob * pos_mask).sum(dim=1) / pos_count
+        supcon_loss = supcon_loss.mean()
+
+        # Weighted final loss
+        total_loss = (self.w_ce * ce_loss) + (self.w_supcon * supcon_loss) + (self.w_angle * angle_loss)
+
+        return total_loss
