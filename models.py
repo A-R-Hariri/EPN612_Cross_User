@@ -336,7 +336,7 @@ class RestLoss(nn.Module):
 
 
 class ActiveLoss(nn.Module):
-    def __init__(self, alpha1=1.0, alpha2=0.0, weight=None):
+    def __init__(self, alpha1=1.0, alpha2=0.1, weight=None):
         super().__init__()
         self.ce = nn.CrossEntropyLoss(reduction='none', 
                                       weight=weight)
@@ -354,32 +354,6 @@ class ActiveLoss(nn.Module):
         loss = loss * (1 + self.alpha2 * p2.float())
 
         return loss.mean()
-
-
-class EqLoss(nn.Module):
-    def __init__(self, alpha=0.3, eps=1e-8, weight=None):
-        super().__init__()
-        self.alpha = alpha
-        self.eps = eps
-        self.ce = nn.CrossEntropyLoss(reduction="none", weight=weight)
-
-    def forward(self, logits, targets):
-
-        l = self.ce(logits, targets)
-        mean = l.mean()
-
-        classes = torch.unique(targets)
-        class_means = []
-
-        for c in classes:
-            mask = targets == c
-            class_means.append(l[mask].mean())
-
-        class_means = torch.stack(class_means)
-
-        equity = class_means.var(unbiased=False) / (class_means.mean() + self.eps)
-
-        return mean + self.alpha * equity
 
 
 def _balanced_mean(loss, logits, targets):
