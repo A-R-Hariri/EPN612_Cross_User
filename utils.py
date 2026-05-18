@@ -240,7 +240,8 @@ def train(model, train_loader, val_loader, name,
     wait = 0
     best_epoch = 0
 
-    os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
+    if save_chkp:
+        os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
 
     for ep in range(1, epochs + 1):
         model.train()
@@ -353,7 +354,8 @@ def train_grl(model, train_loader, val_loader, name,
     wait = 0
     best_epoch = 0
 
-    os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
+    if save_chkp:
+        os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
 
     for ep in range(1, epochs + 1):
         model.train()
@@ -436,10 +438,11 @@ def train_grl(model, train_loader, val_loader, name,
             wait=f"{wait:3.0f}")
         pbar.close()
 
-        val_conf_norm = val_conf / val_conf.sum(dim=1, keepdim=True).clamp(min=1.0)
-        for i, row in enumerate(val_conf_norm):
-            print(f"  c{i}: [" + ", ".join([f"{v.item():.2f}" for v in row]) +
-                    f"]  recall={row[i].item():.2f}")
+        if verbose:
+            val_conf_norm = val_conf / val_conf.sum(dim=1, keepdim=True).clamp(min=1.0)
+            for i, row in enumerate(val_conf_norm):
+                print(f"  c{i}: [" + ", ".join([f"{v.item():.2f}" for v in row]) +
+                        f"]  recall={row[i].item():.2f}")
 
         if save_chkp:
             checkpoint = {'epoch': ep,
@@ -472,7 +475,8 @@ def train_sbj(model, train_loader, val_loader, name,
     wait = 0
     best_epoch = 0
 
-    os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
+    if save_chkp:
+        os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
 
     for ep in range(1, epochs + 1):
         model.train()
@@ -543,10 +547,11 @@ def train_sbj(model, train_loader, val_loader, name,
             wait=f"{wait:3.0f}")
         pbar.close()
 
-        val_conf_norm = val_conf / val_conf.sum(dim=1, keepdim=True).clamp(min=1.0)
-        for i, row in enumerate(val_conf_norm):
-            print(f"  c{i}: [" + ", ".join([f"{v.item():.2f}" for v in row]) +
-                    f"]  recall={row[i].item():.2f}")
+        if verbose:
+            val_conf_norm = val_conf / val_conf.sum(dim=1, keepdim=True).clamp(min=1.0)
+            for i, row in enumerate(val_conf_norm):
+                print(f"  c{i}: [" + ", ".join([f"{v.item():.2f}" for v in row]) +
+                        f"]  recall={row[i].item():.2f}")
 
         if save_chkp:
             checkpoint = {'epoch': ep,
@@ -556,7 +561,8 @@ def train_sbj(model, train_loader, val_loader, name,
     model.load_state_dict(best_state)
     checkpoint = {'epoch': best_epoch,
                 'model_state_dict': model.state_dict()}
-    torch.save(checkpoint, f"{CHECKPOINT_PATH}/{name}/{name}.pt")
+    if save_chkp:
+        torch.save(checkpoint, f"{CHECKPOINT_PATH}/{name}/{name}.pt")
     return model
 
 
@@ -675,10 +681,11 @@ def train_triplet(model, train_loader, val_loader, name,
             wait=f"{wait:2d}")
         pbar.close()
 
-        val_conf_norm = val_conf / val_conf.sum(dim=1, keepdim=True).clamp(min=1.0)
-        for i, row in enumerate(val_conf_norm):
-            print(f"  c{i}: [" + ", ".join([f"{v.item():.2f}" for v in row]) +
-                    f"]  recall={row[i].item():.2f}")
+        if verbose:
+            val_conf_norm = val_conf / val_conf.sum(dim=1, keepdim=True).clamp(min=1.0)
+            for i, row in enumerate(val_conf_norm):
+                print(f"  c{i}: [" + ", ".join([f"{v.item():.2f}" for v in row]) +
+                        f"]  recall={row[i].item():.2f}")
                 
         if save_chkp:
             checkpoint = {'epoch': ep,
