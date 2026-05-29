@@ -288,6 +288,7 @@ def train(model, train_loader, val_loader, name,
                     loss = loss_fn(logits, yb)                    
 
             scaler.scale(loss).backward()
+            clip_grad_norm_(model.parameters(), 1.0)
             scaler.step(opt)
             scaler.update()
 
@@ -527,6 +528,7 @@ def train_sbj(model, train_loader, val_loader, name,
                     loss = loss_fn(logits, yb, ys)                    
 
             scaler.scale(loss).backward()
+            clip_grad_norm_(model.parameters(), 1.0)
             scaler.step(opt)
             scaler.update()
 
@@ -1381,6 +1383,7 @@ def train_ddp(model, train_loader, val_loader, name,
     best_val = 1e9
     best_state = {k: v.clone().cpu() for k, v in model.module.state_dict().items()}
     wait = 0
+    best_epoch = 0
 
     if IS_MAIN and save_chkp:
         os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
@@ -1448,6 +1451,7 @@ def train_ddp(model, train_loader, val_loader, name,
                 best_state = {k: v.clone().cpu()
                               for k, v in model.module.state_dict().items()}
                 wait = 0
+                best_epoch = ep
             else:
                 wait += 1
 
@@ -1486,6 +1490,14 @@ def train_ddp(model, train_loader, val_loader, name,
         dist.broadcast(v_dev, src=0)
     model.module.load_state_dict(
         {k: v.to(device) for k, v in best_state.items()})
+    
+    dist.barrier()
+    if IS_MAIN:
+        if save_chkp:
+            checkpoint = {'epoch': best_epoch,
+            'model_state_dict': model.state_dict()}
+            if save_chkp: 
+                torch.save(checkpoint, f"{CHECKPOINT_PATH}/{name}/{name}.pt")
     return model
 
 
