@@ -1248,35 +1248,33 @@ def eval_within_lda(model, x, meta):
     return results
 
 
-def eval_test_lda(model, X, metas, name, save=True):
-
+def eval_test_lda(model, X, metas, name, save=True,
+                  csv_path=RESULTS_PATH):
     results = {}
     os.makedirs(f"{FIGURE_PATH}/{name}/", exist_ok=True)
 
     def run(_x, meta, tag):
         preds = model.predict(_x)
-        
+
         subjects = np.asarray(meta['subjects'])
-        labels = np.asarray(meta['classes'])
+        labels   = np.asarray(meta['classes'])
         unique_subjects = np.unique(subjects)
         n_subj = len(unique_subjects)
-        
-        acc, act_acc, bal_acc = np.zeros(n_subj), np.zeros(n_subj), np.zeros(n_subj)
+
+        acc, act_acc, bal_acc, f1 = (np.zeros(n_subj) for _ in range(4))
 
         for i, s in enumerate(unique_subjects):
             mask = (subjects == s)
             ps, ls = preds[mask], labels[mask]
 
-            # CA (Classification Accuracy)
             acc[i] = (ps == ls).mean()
 
-            # AER logic (Active Error Rate / Active Accuracy)
+            f1[i] = f1_score(ls, ps, average='macro')
+
             act_mask = (ls != 0)
             if act_mask.any():
                 act_acc[i] = (ps[act_mask] == ls[act_mask]).mean()
 
-            # Vectorized Balanced Accuracy
-            # Efficiently calculates recall for all classes at once
             cm = confusion_matrix(ls, ps, labels=np.arange(CLASSES))
             with np.errstate(divide='ignore', invalid='ignore'):
                 per_class = np.diag(cm) / cm.sum(axis=1)
@@ -1284,17 +1282,32 @@ def eval_test_lda(model, X, metas, name, save=True):
 
         acc, act_acc, bal_acc = acc * 100, act_acc * 100, bal_acc * 100
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 7), dpi=200)
-        fig.suptitle(f"{tag} | Mean Acc {acc.mean():.2f} ± {np.std(acc):.2f} \
-                     | Mean Actv {act_acc.mean():.2f} ± {np.std(act_acc):.2f}")
-        
-        ax1.bar(np.arange(n_subj), np.sort(acc))
+        fig, axs = plt.subplots(2, 2, figsize=(11, 11), dpi=200)
+        ax1, ax2, ax3, ax4 = axs.flatten()
+        fig.suptitle(
+            f"{tag} | Mean Acc {acc.mean():.2f} ± {acc.std():.2f} "
+            f"| Mean Actv {act_acc.mean():.2f} ± {act_acc.std():.2f} "
+            f"| Mean Bal {bal_acc.mean():.2f} ± {bal_acc.std():.2f} "
+            f"| Mean F1 {f1.mean():.2f} ± {f1.std():.2f}"
+        )
+
+        _idx = np.argsort(bal_acc)
+
+        ax1.bar(np.arange(n_subj), acc[_idx])
         ax1.axhline(acc.mean(), color='red', linestyle='--')
         ax1.set_title('Per Subject Accuracy')
-        
-        ax2.bar(np.arange(n_subj), np.sort(act_acc))
+
+        ax2.bar(np.arange(n_subj), act_acc[_idx])
         ax2.axhline(act_acc.mean(), color='red', linestyle='--')
         ax2.set_title('Per Subject Active Accuracy')
+
+        ax3.bar(np.arange(n_subj), bal_acc[_idx])
+        ax3.axhline(bal_acc.mean(), color='red', linestyle='--')
+        ax3.set_title('Per Subject Balanced Accuracy')
+
+        ax4.bar(np.arange(n_subj), f1[_idx])
+        ax4.axhline(f1.mean(), color='red', linestyle='--')
+        ax4.set_title('Per Subject F1 Score')
 
         fig.tight_layout(rect=[0, 0, 1, 0.95])
         fig.savefig(f"{FIGURE_PATH}/{name}/{tag}.jpg")
@@ -1303,30 +1316,25 @@ def eval_test_lda(model, X, metas, name, save=True):
 
         if save:
             os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
-            # np.save(f"{CHECKPOINT_PATH}/{name}/acc_{tag}.npy", acc)
-            # np.save(f"{CHECKPOINT_PATH}/{name}/aer_{tag}.npy", act_acc)
-            np.save(f"{CHECKPOINT_PATH}/{name}/results.npy", 
-                    np.stack((acc, act_acc, bal_acc)))
+            np.save(f"{CHECKPOINT_PATH}/{name}/results_{tag}.npy",
+                    np.stack((acc, act_acc, bal_acc, f1)))
+            np.save(f"{CHECKPOINT_PATH}/{name}/preds_{tag}.npy", preds)
+            np.save(f"{CHECKPOINT_PATH}/{name}/labels_{tag}.npy", labels)
 
         return {"acc_mean": acc.mean(), "acc_std": acc.std(),
                 "act_acc_mean": act_acc.mean(), "act_acc_std": act_acc.std(),
-                "bal_acc_mean": bal_acc.mean(), "bal_acc_std": bal_acc.std()}
+                "bal_acc_mean": bal_acc.mean(), "bal_acc_std": bal_acc.std(),
+                "F1": f1.mean(), "F1_std": f1.std()}
 
-    # Iterate through provided loaders (raw, segmented, relabeled)
     for tag in X.keys():
         results[tag] = run(X[tag], metas[tag], tag)
 
-    # Atomic CSV logging (Fastest concurrent-safe method)
-    csv_path = f"{FIGURE_PATH}/results.csv"
-    rows = [{"model": name, "test_set": tag, **r} for tag, r in results.items()]
-    empty_row = {k: "" for k in rows[0].keys()}
-    rows.insert(0, empty_row)
+    rows = [{"model": name, "test set": tag, **r} for tag, r in results.items()]
     df_new = pd.DataFrame(rows)
-    df_new.to_csv(csv_path, mode='a', index=False, header=not os.path.exists(csv_path))
+    df_new.to_csv(csv_path, mode='a', index=False,
+                  header=not os.path.exists(csv_path))
 
     return results
-
-
 
 
 # ---- DDP-aware loader ----
