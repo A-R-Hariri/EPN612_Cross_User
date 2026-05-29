@@ -69,10 +69,11 @@ weights = torch.tensor(compute_class_weight('balanced',
                                 y=train_meta['classes']),
                                 dtype=torch.float32,
                                 device=DEVICE)
+weights = None
 
 
 NAME = f"cnn_{TAG}_base"
-model = CNN()
+model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -95,7 +96,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = f"cnn_{TAG}_std"
-model = CNN()
+model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -118,7 +119,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = f"cnn_{TAG}_cvar"
-model = CNN()
+model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -141,7 +142,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = f"cnn_{TAG}_rest"
-model = CNN()
+model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -164,7 +165,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = f"cnn_{TAG}_act"
-model = CNN()
+model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -187,7 +188,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = f"cnn_{TAG}_grl"
-model = CNN_GRL()
+model = MHCNN_GRL()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train_grl(model=model, name=NAME, 
@@ -211,7 +212,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = f"cnn_{TAG}_sbj"
-model = CNN()
+model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train_sbj(model=model, name=NAME, 
@@ -234,7 +235,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = f"cnn_{TAG}_proto"
-model = CNN()
+model = MH()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -258,7 +259,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = f"cnn_{TAG}_1va"
-model = CNN()
+model = MH()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -282,7 +283,7 @@ eval_test(model=model, name=NAME,
 
 
 NAME = f"cnn_{TAG}_ang"
-model = CNN()
+model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -303,87 +304,3 @@ eval_test(model=model, name=NAME,
                   'standard': test_meta_standard,
                   'segmented': test_meta_segmented,
                   'relabeled': test_meta_relabeled})
-
-
-# c = np.unique(train_meta['classes'], return_counts=True)[1]
-# indx_t = np.random.random(len(train_meta['classes'])) < c[np.argsort(c)[:-1]].mean() / c.max()
-# train_loader = create_loader(train_windows[indx_t], 
-#                              train_meta['classes'][indx_t], 
-#                              train_meta['subjects'][indx_t],
-#                              batch=BATCH_SIZE, shuffle=True)
-
-# c = np.unique(val_meta['classes'], return_counts=True)[1]
-# indx_v = np.random.random(len(val_meta['classes'])) < c[np.argsort(c)[:-1]].mean() / c.max()
-# val_loader = create_loader(val_windows[indx_v],
-#                            val_meta['classes'][indx_v], 
-#                            val_meta['subjects'][indx_v],
-#                            batch=BATCH_SIZE, shuffle=True)
-
-
-# NAME = f"cnn_{TAG}_base-bal"
-# model = CNN()
-# print(model, f"\nParameters count: {count_params(model):,}")
-# if MODE == "train":
-#     train(model=model, name=NAME, 
-#         train_loader=train_loader,
-#         val_loader=val_loader, 
-#         loss_fn=nn.CrossEntropyLoss(weight=None),
-#         save_chkp=SAVE_CHKP)
-# else:
-#     model.load_state_dict(torch.load(join
-#         (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-# eval_test(model=model, name=NAME, 
-#           loaders={'raw': test_loader_raw,
-#                    'standard': test_loader_standard,
-#                    'segmented': test_loader_segmented,
-#                    'relabeled': test_loader_relabeled},
-#            metas={'raw': test_meta_raw,
-#                   'standard': test_meta_standard,
-#                   'segmented': test_meta_segmented,
-#                   'relabeled': test_meta_relabeled})
-
-    
-# NAME = f"cnn_{TAG}_std-bal"
-# model = CNN()
-# print(model, f"\nParameters count: {count_params(model):,}")
-# if MODE == "train":
-#     train(model=model, name=NAME, 
-#         train_loader=train_loader,
-#         val_loader=val_loader, 
-#         loss_fn=STDLoss(),
-#         save_chkp=SAVE_CHKP)
-# else:
-#     model.load_state_dict(torch.load(join
-#         (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-# eval_test(model=model, name=NAME, 
-#           loaders={'raw': test_loader_raw,
-#                    'standard': test_loader_standard,
-#                    'segmented': test_loader_segmented,
-#                    'relabeled': test_loader_relabeled},
-#            metas={'raw': test_meta_raw,
-#                   'standard': test_meta_standard,
-#                   'segmented': test_meta_segmented,
-#                   'relabeled': test_meta_relabeled})
-
-
-# NAME = f"cnn_{TAG}_rest-bal"
-# model = CNN()
-# print(model, f"\nParameters count: {count_params(model):,}")
-# if MODE == "train":
-#     train(model=model, name=NAME, 
-#         train_loader=train_loader,
-#         val_loader=val_loader, 
-#         loss_fn=RestLoss(weight=None),
-#         save_chkp=SAVE_CHKP)
-# else:
-#     model.load_state_dict(torch.load(join
-#         (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-# eval_test(model=model, name=NAME, 
-#           loaders={'raw': test_loader_raw,
-#                    'standard': test_loader_standard,
-#                    'segmented': test_loader_segmented,
-#                    'relabeled': test_loader_relabeled},
-#            metas={'raw': test_meta_raw,
-#                   'standard': test_meta_standard,
-#                   'segmented': test_meta_segmented,
-#                   'relabeled': test_meta_relabeled})

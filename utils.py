@@ -2,13 +2,19 @@ import os, copy, time, math
 import numpy as np, pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, f1_score
+from sklearn.preprocessing import StandardScaler
 from concurrent.futures import ThreadPoolExecutor
 
 import torch;
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data.distributed import DistributedSampler
 import torch.nn as nn; import torch.nn.functional as F
 from torch.optim import Adam
 from torch.amp import GradScaler, autocast
 from torch.utils.data import (DataLoader, TensorDataset, Sampler)
+from sklearn.preprocessing import StandardScaler
+from libemg.feature_extractor import FeatureExtractor
 from torch.nn.utils import clip_grad_norm_
 
 
@@ -27,15 +33,28 @@ else:
 
 DTYPE = np.float32
 PICKLE_PATH = 'pickles'; CHECKPOINT_PATH = 'checkpoints'; FIGURE_PATH = 'figures'
-SEQ = 40; INC = 2; CH = 8; CLASSES = 5; VAL_CUTOFF = 332
-WORKERS = 4; PRE_FETCH = 2; VERBOSE=True; DEVICE = 'cuda'
 UPDATE_EVERY = 50; PRESIST_WORKER = False; PIN_MEMORY = True
 RESULTS_PATH = f"{FIGURE_PATH}/results.csv"
 
+SEQ = 40; INC = 5; CH = 8; CLASSES = 5; VAL_CUTOFF = 332
+WORKERS = 4; PRE_FETCH = 2; VERBOSE=True; DEVICE = 'cuda'
+
 _GESTURE_LABELS = {0: "NM", 1: "HC", 2: "FX", 3: "EX", 4: "HO"}
 
-EPOCHS = 200; BATCH_SIZE = 4096; DROPOUT = 0.2; PATIENCE = 20
-LR_FACTOR = 0.6; LR_PATIENCE = 5; LR_INIT = 5e-4; LR_MIN = 1e-6
+EPOCHS = 300; BATCH_SIZE = 2048; DROPOUT = 0.2; PATIENCE = 15
+LR_FACTOR = 0.6; LR_PATIENCE = 7; LR_INIT = 5e-4; LR_MIN = 1e-6
+
+N_SUB     = 4       # 4 sub-windows × 10 samples = 40 samples total
+SAMPLING_RATE = 200
+FEATURE_DIC = {
+               'WENG_fs': SAMPLING_RATE,
+               'DFTR_fs': SAMPLING_RATE,
+               'MDF_fs': SAMPLING_RATE,
+               'MNF_fs': SAMPLING_RATE,
+               'SM_fs': SAMPLING_RATE,
+               'WV_fs': SAMPLING_RATE,
+               'WENT_fs': SAMPLING_RATE,
+               }
 
 
 # ======== MODELS, TRAINING & DATASETS ========
@@ -261,6 +280,9 @@ def train(model, train_loader, val_loader, name,
                 if return_emb and return_logits:
                     emb, logits = model(xb, return_emb, return_logits)
                     loss = loss_fn(emb, logits, yb)
+                elif return_emb:
+                    emb, logits = model(xb, return_emb, return_logits)
+                    loss = loss_fn(emb, yb)
                 else:
                     logits = model(xb)
                     loss = loss_fn(logits, yb)                    
@@ -497,6 +519,9 @@ def train_sbj(model, train_loader, val_loader, name,
                 if return_emb and return_logits:
                     emb, logits = model(xb, return_emb, return_logits)
                     loss = loss_fn(emb, logits, yb, ys)
+                if return_emb:
+                    emb, logits = model(return_emb, return_logits)
+                    loss = loss_fn(emb, logits, yb)
                 else:
                     logits = model(xb)
                     loss = loss_fn(logits, yb, ys)                    
@@ -609,17 +634,17 @@ def train_triplet(model, train_loader, val_loader, name,
         pbar = tqdm(total=len(train_loader), desc=desc, 
                     leave=True, dynamic_ncols=True, disable=not verbose)
 
-        for xb, yb, sb in train_loader:
+        for xb, yb, ys in train_loader:
             xb = xb.to(device, non_blocking=True)
             yb = yb.to(device, non_blocking=True)
-            sb = sb.to(device, non_blocking=True)
+            ys = ys.to(device, non_blocking=True)
 
             opt.zero_grad(set_to_none=True)
             with autocast(device_type="cuda", enabled=(device=="cuda")):
                 emb, logits = model(xb, return_emb=True, return_logits=True)
                 
                 loss_ce = criterion_ce(logits, yb)
-                loss_tri = criterion_tri(emb, yb, sb)
+                loss_tri = criterion_tri(emb, yb, ys)
                 
                 loss = (current_ce_w * loss_ce) + (current_alpha * loss_tri)
 
@@ -1300,3 +1325,294 @@ def eval_test_lda(model, X, metas, name, save=True):
     df_new.to_csv(csv_path, mode='a', index=False, header=not os.path.exists(csv_path))
 
     return results
+
+
+
+
+# ---- DDP-aware loader ----
+def create_loader_ddp(x, y, s, batch, rank, world_size,
+                      shuffle=True, workers=WORKERS,
+                      prefetch_factor=PRE_FETCH,
+                      pin_memory=PIN_MEMORY):
+    sampler = DistributedSampler(
+        TensorDataset(torch.from_numpy(x), torch.from_numpy(y), torch.from_numpy(s)),
+        num_replicas=world_size,
+        rank=rank,
+        shuffle=shuffle,
+        drop_last=True)      # keeps batch sizes uniform across ranks
+    return DataLoader(
+        TensorDataset(torch.from_numpy(x), torch.from_numpy(y), torch.from_numpy(s)),
+        batch_size=batch,
+        sampler=sampler,     # shuffle=False because sampler handles it
+        num_workers=workers,
+        prefetch_factor=prefetch_factor if workers > 0 else None,
+        pin_memory=pin_memory,
+        drop_last=True)
+
+
+def train_ddp(model, train_loader, val_loader, name,
+              loss_fn=nn.CrossEntropyLoss(),
+              return_emb=False, return_logits=False,
+              epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
+              lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE,
+              patience=PATIENCE, device=None,
+              verbose=VERBOSE, save_chkp=False,
+              rank=0, world_size=1):
+
+    if device is None:
+        device = next(model.parameters()).device
+
+    IS_MAIN = (rank == 0)
+
+    # Optimizer over unwrapped params
+    opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)
+    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        opt, mode="min", factor=lr_factor, patience=lr_patience, min_lr=min_lr)
+    scaler = GradScaler(enabled=True)
+
+    best_val = 1e9
+    best_state = {k: v.clone().cpu() for k, v in model.module.state_dict().items()}
+    wait = 0
+
+    if IS_MAIN and save_chkp:
+        os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
+
+    for ep in range(1, epochs + 1):
+        train_loader.sampler.set_epoch(ep)
+
+        model.train()
+        loss_fn.train()
+        total_loss = torch.tensor(0.0, device=device)
+        correct    = torch.tensor(0.0, device=device)
+        total = 0; step = 0
+
+        pbar = tqdm(total=len(train_loader), desc=f"{name} | Ep {ep}",
+                    leave=True, dynamic_ncols=True,
+                    disable=(not verbose or not IS_MAIN))
+
+        for xb, yb, ys in train_loader:
+            xb = xb.to(device, non_blocking=True)
+            yb = yb.to(device, non_blocking=True)
+            ys = ys.to(device, non_blocking=True)
+
+            opt.zero_grad(set_to_none=True)
+            with autocast(device_type="cuda"):
+                if return_emb and return_logits:
+                    emb, logits = model(xb, return_emb, return_logits)
+                    loss = loss_fn(emb, logits, yb, ys)
+                elif return_emb:
+                    emb = model(xb, return_emb, return_logits)
+                    loss = loss_fn(emb, yb)
+                else:
+                    logits = model(xb)
+                    loss = loss_fn(logits, yb)
+
+            scaler.scale(loss).backward()
+            clip_grad_norm_(model.parameters(), 1.0)
+            scaler.step(opt)
+            scaler.update()
+
+            total_loss += loss.detach()
+            if return_logits:
+                correct += (logits.argmax(1) == yb).sum()
+            total      += yb.numel()
+            step       += 1
+
+            if IS_MAIN and not (step % UPDATE_EVERY):
+                pbar.update(UPDATE_EVERY)
+                pbar.set_postfix(
+                    loss=f"{total_loss.item()/step:10.8f}",
+                    acc=f"{correct.item()/max(1,total):6.4f}",
+                    LR=f"{opt.param_groups[0]['lr']:8.6f}")
+
+        if IS_MAIN and step % UPDATE_EVERY:
+            pbar.update(step % UPDATE_EVERY)
+
+        # ---- Validation: gather metrics from ALL ranks ----
+        val_acc, val_loss, val_bal, val_conf, val_std = evaluate_ddp(model, val_loader, loss_fn,
+                                                        return_emb, return_logits,
+                                                        device, world_size, return_std=True)
+        sch.step(val_loss)
+
+        if IS_MAIN:
+            if val_loss < best_val:
+                best_val = val_loss
+                best_state = {k: v.clone().cpu()
+                              for k, v in model.module.state_dict().items()}
+                wait = 0
+            else:
+                wait += 1
+
+            pbar.set_postfix(
+                loss=f"{total_loss.item()/max(1,len(train_loader)):10.6f}",
+                acc=f"{correct.item()/max(1,total):6.4f}",
+                val_loss=f"{val_loss:10.6f}",
+                val_acc=f"{val_acc:6.4f}",
+                val_bal = f"{val_bal:6.4f}", 
+                val_std = f"{val_std:6.4f}", 
+                LR=f"{opt.param_groups[0]['lr']:8.6f}",
+                wait=f"{wait:3.0f}")
+            pbar.close()
+
+            val_conf_norm = val_conf / val_conf.sum(dim=1, keepdim=True).clamp(min=1.0)
+            for i, row in enumerate(val_conf_norm):
+                print(f"  c{i}: [" + ", ".join([f"{v.item():.2f}" for v in row]) +
+                       f"]  recall={row[i].item():.2f}")
+
+            if save_chkp:
+                torch.save({'epoch': ep,
+                            'model_state_dict': model.module.state_dict()},
+                           f"{CHECKPOINT_PATH}/{name}/chkp_{ep:03d}.pt")
+
+        # Broadcast wait so all ranks stop together
+        wait_t = torch.tensor(wait, device=device)
+        dist.broadcast(wait_t, src=0)
+        if wait_t.item() >= patience:
+            if IS_MAIN:
+                tqdm.write(f"{name} | Early stop at epoch {ep}")
+            break
+
+    # Broadcast best weights from rank 0 to all ranks
+    for v in best_state.values():
+        v_dev = v.to(device)
+        dist.broadcast(v_dev, src=0)
+    model.module.load_state_dict(
+        {k: v.to(device) for k, v in best_state.items()})
+    return model
+
+
+@torch.no_grad()
+def evaluate_ddp(model, loader, loss_fn,
+                 return_emb, return_logits,
+                 device, world_size, return_std=False):
+    model.eval()
+    loss_fn.eval()
+    lsum        = torch.tensor(0.0, device=device)
+    cor         = torch.tensor(0.0, device=device)
+    tot         = torch.tensor(0,   device=device, dtype=torch.long)
+    val_conf_matrix = torch.zeros((CLASSES, CLASSES), device=device)
+    user_conf_matrices = {}  # {user_id: (CLASSES, CLASSES) tensor}
+
+    for xb, yb, ys in loader:
+        xb = xb.to(device, non_blocking=True)
+        yb = yb.to(device, non_blocking=True)
+        ys = ys.to(device, non_blocking=True)
+        with autocast(device_type="cuda"):
+            if return_emb and return_logits:
+                emb, logits = model(xb, return_emb, return_logits)
+                loss = loss_fn(emb, logits, yb, ys)
+            elif return_emb:
+                emb = model(xb, return_emb, return_logits)
+                logits = torch.zeros((yb.shape[0], CLASSES)).to(DEVICE)
+                loss = loss_fn(emb, yb)
+            else:
+                logits = model(xb)
+                loss   = loss_fn(logits, yb)
+
+        preds = logits.argmax(1)
+
+        lsum += loss.detach()
+        cor  += (preds == yb).sum()
+        tot  += yb.numel()
+
+        idx = (yb * CLASSES + preds).clamp(0, CLASSES * CLASSES - 1)
+        val_conf_matrix += torch.bincount(idx, minlength=CLASSES * CLASSES).float().view(CLASSES, CLASSES)
+
+        for user_id in ys.unique().cpu().tolist():
+            mask = ys == user_id
+            if user_id not in user_conf_matrices:
+                user_conf_matrices[user_id] = torch.zeros((CLASSES, CLASSES), device=device)
+            user_idx = (yb[mask] * CLASSES + preds[mask]).clamp(0, CLASSES * CLASSES - 1)
+            user_conf_matrices[user_id] += torch.bincount(user_idx, minlength=CLASSES * CLASSES).float().view(CLASSES, CLASSES)
+
+    dist.all_reduce(lsum,            op=dist.ReduceOp.SUM)
+    dist.all_reduce(cor,             op=dist.ReduceOp.SUM)
+    dist.all_reduce(tot,             op=dist.ReduceOp.SUM)
+    dist.all_reduce(val_conf_matrix, op=dist.ReduceOp.SUM)
+
+    user_conf_matrices_list = [None] * world_size
+    dist.all_gather_object(user_conf_matrices_list,
+                           {uid: m.cpu() for uid, m in user_conf_matrices.items()})
+    global_user_conf = {}
+    for local_dict in user_conf_matrices_list:
+        for user_id, user_conf in local_dict.items():
+            if user_id not in global_user_conf:
+                global_user_conf[user_id] = torch.zeros((CLASSES, CLASSES), device=device)
+            global_user_conf[user_id] += user_conf.to(device)
+
+    user_bal_accs = []
+    for user_conf in global_user_conf.values():
+        class_totals = user_conf.sum(1)
+        recalls = user_conf.diag() / class_totals.clamp(min=1)
+        user_bal_accs.append(recalls[class_totals > 0].mean().item())
+
+    bal_acc = np.mean(user_bal_accs) if user_bal_accs else 0.0
+    bal_std = np.std(user_bal_accs)  if user_bal_accs else 0.0
+    val_conf_matrix = torch.stack(list(global_user_conf.values())).mean(0)
+
+    n_steps = len(loader) * world_size
+
+    if return_std:
+        return (cor.item() / max(1, tot.item()),
+                lsum.item() / max(1, n_steps),
+                bal_acc, val_conf_matrix, bal_std)
+
+    return (cor.item() / max(1, tot.item()),
+            lsum.item() / max(1, n_steps),
+            bal_acc, val_conf_matrix)
+
+
+def extract_full(windows, feat_list, feat_dic):
+    """Full window features. Returns (N, CH*n_feats) → (N, F)"""
+    fe = FeatureExtractor()
+    return fe.extract_features(feat_list, windows, array=True,
+                               fix_feature_errors=True,
+                               feature_dic=feat_dic).reshape(windows.shape[0], -1)
+
+def extract_sub(windows, feat_list, feat_dic, n_sub=N_SUB):
+    """
+    Split each (N, CH, T) window into n_sub sub-windows of (N, CH, T//n_sub),
+    extract features on each, return (N, n_sub, F).
+    """
+    fe = FeatureExtractor()
+    N, CH, T = windows.shape
+    assert T % n_sub == 0, f"T={T} not divisible by n_sub={n_sub}"
+    sub_len = T // n_sub
+    # reshape to (N*n_sub, CH, sub_len) so libemg processes all at once
+    subs = windows.reshape(N * n_sub, CH, sub_len)
+    feats = fe.extract_features(feat_list, subs, array=True,
+                                fix_feature_errors=True,
+                                feature_dic=feat_dic)
+    feats = feats.reshape(N * n_sub, -1)  # (N*n_sub, F)
+    return feats.reshape(N, n_sub, -1)    # (N, n_sub, F)
+
+
+def normalize_features(tr, va, te):
+    """
+    Fit StandardScaler on training data only.
+    Apply to val and test without leaking test statistics.
+
+    Works for both:
+      full window : (N, F)
+      sub-windowed: (N, N_SUB, F) — reshape, scale, reshape back
+    """
+    shape_tr = tr.shape
+    shape_va = va.shape
+    shape_te = te.shape
+
+    # flatten to 2D for scaler: (N, F) or (N*N_SUB, F)
+    tr_2d = tr.reshape(-1, shape_tr[-1])
+    va_2d = va.reshape(-1, shape_va[-1])
+    te_2d = te.reshape(-1, shape_te[-1])
+
+    scaler = StandardScaler()
+    tr_2d  = scaler.fit_transform(tr_2d)   # fit + transform on train
+    va_2d  = scaler.transform(va_2d)       # transform only
+    te_2d  = scaler.transform(te_2d)       # transform only
+
+    return (np.nan_to_num(tr_2d.reshape(shape_tr), nan=0.0, 
+            posinf=0.0, neginf=0.0).astype(np.float32),
+            np.nan_to_num(va_2d.reshape(shape_va), nan=0.0, 
+            posinf=0.0, neginf=0.0).astype(np.float32),
+            np.nan_to_num(te_2d.reshape(shape_te), nan=0.0, 
+            posinf=0.0, neginf=0.0).astype(np.float32))

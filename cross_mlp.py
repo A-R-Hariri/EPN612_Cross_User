@@ -117,7 +117,7 @@ n_features = test_windows_standard.shape[1]
 # ======== PIPELINE ========
 # train_loader = create_loader(train_windows, train_meta['classes'], 
 #                             batch=BATCH_SIZE, shuffle=True)
-# train_loader_grl = create_loader_grl(train_windows, train_meta['classes'], 
+# train_loader_sbj = create_loader_sbj(train_windows, train_meta['classes'], 
 #                                      train_meta['subjects'],
 #                                      batch=BATCH_SIZE, shuffle=True)
 # val_loader = create_loader(val_windows, val_meta['classes'], 
@@ -156,7 +156,7 @@ test_loader_segmented = create_loader(test_windows_segmented,
 train_loader_standard = create_loader(train_windows_standard, 
                             train_meta_standard['classes'],
                             batch=BATCH_SIZE, shuffle=True)
-train_loader_standard_grl = create_loader_grl(train_windows_standard, 
+train_loader_standard_grl = create_loader_sbj(train_windows_standard, 
                             train_meta_standard['classes'],
                             train_meta_standard['subjects'],
                             batch=BATCH_SIZE, shuffle=True)
@@ -193,23 +193,23 @@ weights_standard = torch.tensor(compute_class_weight('balanced',
                                 device=DEVICE)
 
 
-# NAME = "mlp_raw"
-# model = MLP(n_features)
-# print(model, f"\nParameters count: {count_params(model):,}")
-# train(model=model, name=NAME, 
-#       train_loader=train_loader,
-#       val_loader=val_loader, 
-#       loss_fn=nn.CrossEntropyLoss(weight=weights),
-#       save_chkp=SAVE_CHKP)
-# torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
-# # model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
-# eval_test(model=model, name=NAME, 
-#           loaders={'raw': test_loader, 
-#                    'segmented': test_loader_segmented, 
-#                    'relabeled': test_loader_relabeled},
-#            metas={'raw': test_meta, 
-#                   'segmented': test_meta_segmented, 
-#                   'relabeled': test_meta_relabeled})
+NAME = "mlp_raw"
+model = MLP(n_features)
+print(model, f"\nParameters count: {count_params(model):,}")
+train(model=model, name=NAME, 
+      train_loader=train_loader,
+      val_loader=val_loader, 
+      loss_fn=nn.CrossEntropyLoss(weight=weights),
+      save_chkp=SAVE_CHKP)
+torch.save(model.state_dict(), join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+# model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+eval_test(model=model, name=NAME, 
+          loaders={'raw': test_loader, 
+                   'segmented': test_loader_segmented, 
+                   'relabeled': test_loader_relabeled},
+           metas={'raw': test_meta, 
+                  'segmented': test_meta_segmented, 
+                  'relabeled': test_meta_relabeled})
 
 
 # NAME = "mlp_segmented"

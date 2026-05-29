@@ -7,221 +7,256 @@ from utils import *
 
     
 # ======== MODELS ========
-class MLP(nn.Module):
-    def __init__(self, feats, emb_dim=128, proj_dim=128, dropout=DROPOUT):
-        super().__init__()
-
-        self.fc1 = nn.Linear(feats, 512)
-        self.fc2 = nn.Linear(512, 256)
-        self.fc3 = nn.Linear(256, 128)
-        self.fc_emb = nn.Linear(128, 64)
-        self.classifier = nn.Linear(64, CLASSES)  # embedding
-        
-        self.drop = nn.Dropout(dropout)
-        self.relu = nn.ReLU()
-
-        self.apply(self._init)
-
-    def _init(self, m):
-        if isinstance(m, (nn.Linear)):
-            nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
-            if m.bias is not None:
-                nn.init.zeros_(m.bias)
-
-    def forward(self, x, return_emb=False, return_logits=False):
-        x = x / 128.0
-
-        x = self.relu(self.fc1(x))
-        x = self.drop(x)
-
-        x = self.relu(self.fc2(x))
-        x = self.drop(x)
-
-        x = self.relu(self.fc3(x))
-        x = self.drop(x)
-
-        emb = self.relu(self.fc_emb(x))
-
-        logits = self.classifier(emb)
-
-        if return_emb and return_logits:
-            return emb, logits
-        if return_emb:
-            return emb
-        return logits
-    
-
-class CNNBasic(nn.Module):
-    def __init__(self, ch=CH, num_classes=CLASSES, dropout=DROPOUT):
-        super().__init__()
-
-        self.conv1 = nn.Conv1d(ch, 32, 4, padding="same")
-        self.conv2 = nn.Conv1d(32, 64, 4, padding="same")
-        self.conv3 = nn.Conv1d(64, 96, 4, padding="same")
-        self.conv4 = nn.Conv1d(96, 128, 4, padding="same")
-
-        self.pool = nn.AdaptiveAvgPool1d(1)
-
-        self.fc1 = nn.Linear(128, 128)
-        self.fc_emb = nn.Linear(128, 128)
-
-        self.classifier = nn.Linear(128, num_classes)
-
-        self.relu = nn.ReLU()
-        self.drop = nn.Dropout(dropout)
-
-    def forward(self, x):
-        x = x / 128.0
-
-        x = self.drop(self.relu(self.conv1(x)))
-        x = self.drop(self.relu(self.conv2(x)))
-        x = self.drop(self.relu(self.conv3(x)))
-        x = self.drop(self.relu(self.conv4(x)))
-
-        x = self.pool(x).squeeze(-1)
-
-        x = self.relu(self.fc1(x))
-        emb = self.fc_emb(x)
-
-        logits = self.classifier(emb)
-        return logits
-    
-
-class LSTM(nn.Module):
-    def __init__(self, ch=CH, hidden=128, layers=2, num_classes=CLASSES):
-        super().__init__()
-
-        self.lstm = nn.LSTM(
-            input_size=ch,
-            hidden_size=hidden,
-            num_layers=layers,
-            batch_first=True,
-            bidirectional=True
-        )
-
-        self.fc1 = nn.Linear(hidden * 2, 128)
-        self.fc_emb = nn.Linear(128, 128)
-
-        self.classifier = nn.Linear(128, num_classes)
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        x = x / 128.0
-
-        # x: (B, C, T) → (B, T, C)
-        x = x.transpose(1,2)
-
-        x, _ = self.lstm(x)
-
-        x = x[:, -1]
-        x = self.relu(self.fc1(x))
-        emb = self.fc_emb(x)
-
-        logits = self.classifier(emb)
-
-        return logits
-    
-
-class TransformerEMG(nn.Module):
-    def __init__(self, ch=CH, seq=SEQ, d_model=128, num_heads=4, num_layers=2, num_classes=CLASSES):
-        super().__init__()
-
-        self.proj = nn.Linear(ch, d_model)
-
-        encoder_layer = nn.TransformerEncoderLayer(
-            d_model=d_model,
-            nhead=num_heads,
-            batch_first=True)
-
-        self.encoder = nn.TransformerEncoder(
-            encoder_layer,
-            num_layers=num_layers)
-
-        self.fc1 = nn.Linear(128, 128)
-        self.fc_emb = nn.Linear(128, 128)
-
-        self.classifier = nn.Linear(128, num_classes)
-
-        self.relu = nn.ReLU()
-
-    def forward(self, x):
-        x = x / 128.0
-
-        # (B,C,T) -> (B,T,C)
-        x = x.transpose(1,2)
-        x = self.proj(x)
-        x = self.encoder(x)
-        x = x.mean(dim=1)
-
-        x = self.relu(self.fc1(x))
-        emb = self.fc_emb(x)
-
-        logits = self.classifier(emb)
-
-        return logits
-    
 
 # -------- Proposed --------
-class CNN(nn.Module):
-    def __init__(self, ch=CH, seq=SEQ, emb_dim=128, 
-                 num_classes=CLASSES, dropout=DROPOUT):
+class MHCNN(nn.Module):
+    """
+    Proposed model: parallel dilated multi-horizon CNN on raw EMG.
+    Three parallel branches (dilation 1, 2, 4) capture activation
+    dynamics at ~40ms, ~80ms, and ~160ms receptive fields simultaneously,
+    covering the full temporal structure available within a 200ms window.
+
+    Input : (B, 8, 40) 
+    """
+    def __init__(self, ch: int = CH, emb_dim: int = 128,
+                 num_classes: int = CLASSES, dropout: float = DROPOUT):
         super().__init__()
-        self.emb_dim = emb_dim
-        self.dropout = dropout
-
-        self.conv1 = nn.Conv1d(ch, 32, 8, dilation=1, padding="same")
-        self.conv2 = nn.Conv1d(ch, 32, 8, dilation=2, padding="same")
-        self.conv3 = nn.Conv1d(ch, 32, 8, dilation=4, padding="same")
-        self.conv4 = nn.Conv1d(96, 128, 4, dilation=1, padding="same")
-
-        self.pool = nn.AdaptiveAvgPool1d(1)
-        
-        self.fc1 = nn.Linear(128, 128)
-        self.fc_emb = nn.Linear(128, emb_dim)
-
-        self.drop = nn.Dropout(self.dropout)
+        self.conv1 = nn.Conv1d(ch, 32, 8, dilation=1, padding='same')
+        self.conv2 = nn.Conv1d(ch, 32, 8, dilation=2, padding='same')
+        self.conv3 = nn.Conv1d(ch, 32, 8, dilation=4, padding='same')
+        self.conv4 = nn.Conv1d(96, 128, 4, dilation=1, padding='same')
+        self.pool  = nn.AdaptiveAvgPool1d(1)
+        self.fc1        = nn.Linear(128, 128)
+        self.fc_emb     = nn.Linear(128, emb_dim)
+        self.classifier = nn.Linear(emb_dim, num_classes)
+        self.drop = nn.Dropout(dropout)
         self.relu = nn.ReLU()
         self.gelu = nn.GELU()
-
-        self.classifier = nn.Linear(self.emb_dim, 
-                                    num_classes)
-
         self.apply(self._init)
 
     def _init(self, m):
         if isinstance(m, (nn.Conv1d, nn.Linear)):
-            nn.init.kaiming_normal_(m.weight, nonlinearity="relu")
-            if m.bias is not None:
-                nn.init.zeros_(m.bias)
+            nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+            if m.bias is not None: nn.init.zeros_(m.bias)
 
     def forward(self, x, return_emb=False, return_logits=False):
+        # x: (B, 8, 40)
         x = x / 128.0
-
-        x1 = self.relu(self.conv1(x))
-        x1 = self.drop(x1)
-        x2 = self.relu(self.conv2(x))
-        x2 = self.drop(x2)
-        x3 = self.relu(self.conv3(x))
-        x3 = self.drop(x3)
-        x = torch.cat((x1, x2, x3), 1)
-        x = self.relu(self.conv4(x))
-        x = self.drop(x)
-
-        x = self.pool(x).squeeze(-1)
-        # x = x.flatten(1)
-
-        x = self.fc1(x)
-        x = self.gelu(x)
-        emb = self.fc_emb(x)
-
+        x1 = self.drop(self.relu(self.conv1(x)))
+        x2 = self.drop(self.relu(self.conv2(x)))
+        x3 = self.drop(self.relu(self.conv3(x)))
+        x  = self.drop(self.relu(self.conv4(torch.cat((x1, x2, x3), dim=1))))
+        x  = self.pool(x).squeeze(-1)
+        x      = self.drop(self.gelu(self.fc1(x)))
+        emb    = self.fc_emb(x)
         logits = self.classifier(emb)
-
-        if return_emb and return_logits:
-            return emb, logits
-        if return_emb:
-            return emb
+        if return_emb and return_logits: return emb, logits
+        if return_emb:                   return emb
         return logits
     
+
+class MLP(nn.Module):
+    """
+    Deep MLP on hand-crafted features, single window, no temporal context.
+
+    Input : (B, 8)  RMS per channel
+    """
+    def __init__(self, n_features: int = 8, emb_dim: int = 128,
+                 num_classes: int = CLASSES, dropout: float = DROPOUT):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_features, 256), nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(256, 256),        nn.ReLU(), nn.Dropout(dropout),
+            nn.Linear(256, 128),        nn.ReLU(), nn.Dropout(dropout),
+        )
+        self.fc_emb     = nn.Linear(128, emb_dim)
+        self.classifier = nn.Linear(emb_dim, num_classes)
+        self.apply(self._init)
+
+    def _init(self, m):
+        if isinstance(m, nn.Linear):
+            nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+            if m.bias is not None: nn.init.zeros_(m.bias)
+
+    def forward(self, x, return_emb=False, return_logits=False):
+        # x: (B, 8)
+        x      = self.net(x)
+        emb    = self.fc_emb(x)
+        logits = self.classifier(emb)
+        if return_emb and return_logits: return emb, logits
+        if return_emb:                   return emb
+        return logits
+
+
+# LSTM variants  
+class LSTM(nn.Module):
+    """
+    LSTM over raw EMG timesteps within a single 200ms window.
+    Processes 40 raw timesteps x 8 channels.
+
+    Input : (B, 8, 40) ->  internally transposed to (B, 40, 8)
+    """
+    def __init__(self, ch: int = CH, hidden: int = 128, num_layers: int = 3,
+                 emb_dim: int = 128, num_classes: int = CLASSES,
+                 dropout: float = DROPOUT):
+        super().__init__()
+        self.lstm = nn.LSTM(
+            input_size=ch, hidden_size=hidden, num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0.0
+        )
+        self.fc1        = nn.Linear(hidden, 128)
+        self.fc_emb     = nn.Linear(128, emb_dim)
+        self.classifier = nn.Linear(emb_dim, num_classes)
+        self.drop       = nn.Dropout(dropout)
+        self.gelu       = nn.GELU()
+        self.apply(self._init)
+
+    def _init(self, m):
+        if isinstance(m, nn.Linear):
+            nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+            if m.bias is not None: nn.init.zeros_(m.bias)
+
+    def forward(self, x, return_emb=False, return_logits=False):
+        # x: (B, 8, 40)
+        x = x / 128.0
+        x = x.permute(0, 2, 1)           # (B, 40, 8)
+        _, (h_n, _) = self.lstm(x)
+        x      = h_n[-1]                 # (B, hidden)
+        x      = self.drop(self.gelu(self.fc1(x)))
+        emb    = self.fc_emb(x)
+        logits = self.classifier(emb)
+        if return_emb and return_logits: return emb, logits
+        if return_emb:                   return emb
+        return logits
+
+
+class LSTM_HCF(nn.Module):
+    """
+    LSTM over sub-windowed RMS features within a single 200ms window.
+    features: fine-grained temporal structure (4 x 50ms RMS steps)
+    rather than a single vector.
+
+    Input : (B, n_sub, 8)  sub-windowed RMS  (pre-computed, see extract_sub_rms)
+            default n_sub=4 → 4 x 50ms steps
+    """
+    def __init__(self, n_features: int = 8, n_sub: int = N_SUB,
+                 hidden: int = 128, num_layers: int = 3,
+                 emb_dim: int = 128, num_classes: int = CLASSES,
+                 dropout: float = DROPOUT):
+        super().__init__()
+        self.lstm = nn.LSTM(
+            input_size=n_features, hidden_size=hidden, num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0.0
+        )
+        self.fc1        = nn.Linear(hidden, 128)
+        self.fc_emb     = nn.Linear(128, emb_dim)
+        self.classifier = nn.Linear(emb_dim, num_classes)
+        self.drop       = nn.Dropout(dropout)
+        self.gelu       = nn.GELU()
+        self.apply(self._init)
+
+    def _init(self, m):
+        if isinstance(m, nn.Linear):
+            nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+            if m.bias is not None: nn.init.zeros_(m.bias)
+
+    def forward(self, x, return_emb=False, return_logits=False):
+        # x: (B, n_sub, 8)
+        _, (h_n, _) = self.lstm(x)
+        x      = h_n[-1]                 # (B, hidden)
+        x      = self.drop(self.gelu(self.fc1(x)))
+        emb    = self.fc_emb(x)
+        logits = self.classifier(emb)
+        if return_emb and return_logits: return emb, logits
+        if return_emb:                   return emb
+        return logits
+
+
+# ──────────────────────────────────────────────
+# CNN baselines and proposed model
+# ──────────────────────────────────────────────
+
+class CNN_Basic(nn.Module):
+    """
+    Single-scale CNN on raw EMG, single window.
+    Ablation of MHCNN: isolates the contribution of
+    multi-horizon parallel dilation from raw signal access alone.
+
+    Input : (B, 8, 40) 
+    """
+    def __init__(self, ch: int = CH, emb_dim: int = 128,
+                 num_classes: int = CLASSES, dropout: float = DROPOUT):
+        super().__init__()
+        self.conv1 = nn.Conv1d(ch,  32, kernel_size=4, padding='same')
+        self.conv2 = nn.Conv1d(32,  128, kernel_size=3, padding='same')
+        self.conv3 = nn.Conv1d(128, 128, kernel_size=3, padding='same')
+        self.pool  = nn.AdaptiveAvgPool1d(1)
+        self.fc1        = nn.Linear(128, 128)
+        self.fc_emb     = nn.Linear(128, emb_dim)
+        self.classifier = nn.Linear(emb_dim, num_classes)
+        self.drop = nn.Dropout(dropout)
+        self.relu = nn.ReLU()
+        self.gelu = nn.GELU()
+        self.apply(self._init)
+
+    def _init(self, m):
+        if isinstance(m, (nn.Conv1d, nn.Linear)):
+            nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+            if m.bias is not None: nn.init.zeros_(m.bias)
+
+    def forward(self, x, return_emb=False, return_logits=False):
+        # x: (B, 8, 40)
+        x = x / 128.0
+        x = self.drop(self.relu(self.conv1(x)))
+        x = self.drop(self.relu(self.conv2(x)))
+        x = self.drop(self.relu(self.conv3(x)))
+        x = self.pool(x).squeeze(-1)
+        x      = self.drop(self.gelu(self.fc1(x)))
+        emb    = self.fc_emb(x)
+        logits = self.classifier(emb)
+        if return_emb and return_logits: return emb, logits
+        if return_emb:                   return emb
+        return logits
+
+class CNN_HCF(nn.Module):
+    """
+    1D CNN over sub-windowed hand-crafted features.
+    Input : (B, F, 4)  — F features as channels, 4 sub-windows as time.
+    """
+    def __init__(self, n_feat: int, n_sub: int = N_SUB,
+                 emb_dim: int = 128, num_classes: int = CLASSES,
+                 dropout: float = DROPOUT):
+        super().__init__()
+        self.conv1 = nn.Conv1d(n_feat, 64,  kernel_size=3, padding='same')
+        self.conv2 = nn.Conv1d(64,    128,  kernel_size=3, padding='same')
+        self.pool  = nn.AdaptiveAvgPool1d(1)
+        self.fc1        = nn.Linear(128, 128)
+        self.fc_emb     = nn.Linear(128, emb_dim)
+        self.classifier = nn.Linear(emb_dim, num_classes)
+        self.drop = nn.Dropout(dropout)
+        self.relu = nn.ReLU()
+        self.gelu = nn.GELU()
+        self.apply(self._init)
+
+    def _init(self, m):
+        if isinstance(m, (nn.Conv1d, nn.Linear)):
+            nn.init.kaiming_normal_(m.weight, nonlinearity='relu')
+            if m.bias is not None: nn.init.zeros_(m.bias)
+
+    def forward(self, x, return_emb=False, return_logits=False):
+        # x: (B, F, 4)
+        x = self.drop(self.relu(self.conv1(x)))
+        x = self.drop(self.relu(self.conv2(x)))
+        x = self.pool(x).squeeze(-1)              # (B, 128)
+        x      = self.drop(self.gelu(self.fc1(x)))
+        emb    = self.fc_emb(x)
+        logits = self.classifier(emb)
+        if return_emb and return_logits: return emb, logits
+        if return_emb:                   return emb
+        return logits
+
 
 # -------- GRL --------
 class _GRLFn(Function):
@@ -314,6 +349,16 @@ class CNN_GRL(nn.Module):
     
 
 # ======== LOSSES ========
+
+class BaseLoss(nn.Module):
+    def __init__(self, weight=None,):
+        super().__init__()
+        self.ce = nn.CrossEntropyLoss(weight=weight)
+
+    def forward(self, logits, labels, *args):
+        return self.ce(logits, labels)
+    
+
 class RestLoss(nn.Module):
     def __init__(self, alpha1=1.0, alpha2=1.0, weight=None):
         super().__init__()
