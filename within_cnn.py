@@ -48,7 +48,7 @@ for rep in REPS:
                       (OneVsAllLoss, '1va'),
                       (AngularLoss, 'ang'),]:
         
-        NAME = f'cnn_within_{TAG}_{l_name}-{rep}'
+        NAME = f'mhcnn_within_{TAG}_{l_name}-{rep}'
         results = []
 
         ranges = [(0, 306), (306, 332), (332, 612)]
@@ -90,7 +90,7 @@ for rep in REPS:
                                             batch=BATCH_SIZE, shuffle=False, 
                                             workers=WORKERS, persistent_workers=PRESIST_WORKER)
 
-                model = CNN()
+                model = MHCNN()
                 weights = torch.tensor(compute_class_weight('balanced', 
                                             classes=np.arange(CLASSES), 
                                                 y=train_meta['classes']),
