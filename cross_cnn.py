@@ -69,17 +69,17 @@ weights = torch.tensor(compute_class_weight('balanced',
                                 y=train_meta['classes']),
                                 dtype=torch.float32,
                                 device=DEVICE)
-weights = None
+weights = None if TAG == 'raw' else weights         # raw is already ~balanced
 
 
-NAME = f"cnn_{TAG}_base"
+NAME = f"mhcnn_{TAG}_base"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
           train_loader=train_loader,
           val_loader=val_loader, 
-          loss_fn=nn.CrossEntropyLoss(weight=weights),
+          loss_fn=BaseLoss(weight=weights),
           save_chkp=SAVE_CHKP)
 else:
     model.load_state_dict(torch.load(join
@@ -95,7 +95,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"cnn_{TAG}_std"
+NAME = f"mhcnn_{TAG}_std"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -118,7 +118,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"cnn_{TAG}_cvar"
+NAME = f"mhcnn_{TAG}_cvar"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -141,7 +141,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"cnn_{TAG}_rest"
+NAME = f"mhcnn_{TAG}_rest"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -164,7 +164,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"cnn_{TAG}_act"
+NAME = f"mhcnn_{TAG}_act"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -187,14 +187,14 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"cnn_{TAG}_grl"
+NAME = f"mhcnn_{TAG}_grl"
 model = MHCNN_GRL()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train_grl(model=model, name=NAME, 
           train_loader=train_loader,
           val_loader=val_loader, 
-          loss_fn=nn.CrossEntropyLoss(weight=weights),
+          loss_fn=BaseLoss(weight=weights),
           loss_fn_sbj=nn.CrossEntropyLoss(),
           save_chkp=SAVE_CHKP)
 else:
@@ -211,7 +211,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"cnn_{TAG}_sbj"
+NAME = f"mhcnn_{TAG}_sbj"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -234,8 +234,8 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"cnn_{TAG}_proto"
-model = MH()
+NAME = f"mhcnn_{TAG}_proto"
+model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -258,8 +258,8 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"cnn_{TAG}_1va"
-model = MH()
+NAME = f"mhcnn_{TAG}_1va"
+model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
     train(model=model, name=NAME, 
@@ -282,7 +282,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"cnn_{TAG}_ang"
+NAME = f"mhcnn_{TAG}_ang"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":

@@ -18,7 +18,7 @@ MMAP_MODE = 'r'; SAVE_CHKP = True
 
 RUN = ''
 N_SUBJECTS = 306; MARGIN = 0.5; W_HARD = 1.0; W_SOFT = 0.0
-ALPHA_START = 0.0; ALPHA_END = 0.25; WARMUP = 25
+ALPHA_START = 0.01; ALPHA_END = 0.25; WARMUP = 25
 
 
 # ======== LOAD DATA ========
@@ -82,8 +82,8 @@ if TAG == 'raw' or TAG == 'all':
         val_windows_raw, val_meta_raw['classes'], val_meta_raw['subjects'],
         batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
 
-    NAME = f"cnn_raw_trp{RUN}"
-    model = CNN()
+    NAME = f"mhcnn_raw_trp{RUN}"
+    model = MHCNN()
     print(model, f"\nParameters count: {count_params(model):,}")
 
     if MODE == "train":
@@ -109,39 +109,39 @@ if TAG == 'raw' or TAG == 'all':
                   'relabeled': test_meta_relabeled})
 
 
-if TAG == 'standard' or TAG == 'all':
-    train_loader_standard = create_triplet_loader(
-        train_windows_standard, train_meta_standard['classes'], train_meta_standard['subjects'],
-        batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=N_SUBJECTS)
-    val_loader_triplet_standard = create_triplet_loader(
-        val_windows_standard, val_meta_standard['classes'], val_meta_standard['subjects'],
-        batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
+# if TAG == 'standard' or TAG == 'all':
+#     train_loader_standard = create_triplet_loader(
+#         train_windows_standard, train_meta_standard['classes'], train_meta_standard['subjects'],
+#         batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=N_SUBJECTS)
+#     val_loader_triplet_standard = create_triplet_loader(
+#         val_windows_standard, val_meta_standard['classes'], val_meta_standard['subjects'],
+#         batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
 
-    NAME = f"cnn_standard_trp{RUN}"
-    model = CNN()
-    print(model, f"\nParameters count: {count_params(model):,}")
+#     NAME = f"mhcnn_standard_trp{RUN}"
+#     model = MHCNN()
+#     print(model, f"\nParameters count: {count_params(model):,}")
 
-    if MODE == "train":
-        train_triplet(model=model, name=NAME, 
-            train_loader=train_loader_standard, val_loader=val_loader_triplet_standard, 
-            criterion_ce=nn.CrossEntropyLoss(weight=None),
-            criterion_tri=TripletLoss(margin=MARGIN, batch_hard=True,
-                                        w_hard=W_HARD, w_soft=W_SOFT), 
-            save_chkp=SAVE_CHKP, epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN, 
-            lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, patience=PATIENCE,
-            alpha_start=ALPHA_START, alpha_end=ALPHA_END, warmup_epochs=WARMUP)
-    else:
-        model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
+#     if MODE == "train":
+#         train_triplet(model=model, name=NAME, 
+#             train_loader=train_loader_standard, val_loader=val_loader_triplet_standard, 
+#             criterion_ce=nn.CrossEntropyLoss(weight=None),
+#             criterion_tri=TripletLoss(margin=MARGIN, batch_hard=True,
+#                                         w_hard=W_HARD, w_soft=W_SOFT), 
+#             save_chkp=SAVE_CHKP, epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN, 
+#             lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, patience=PATIENCE,
+#             alpha_start=ALPHA_START, alpha_end=ALPHA_END, warmup_epochs=WARMUP)
+#     else:
+#         model.load_state_dict(torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt")))
 
-    eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
+#     eval_test(model=model, name=NAME, 
+#           loaders={'raw': test_loader_raw,
+#                    'standard': test_loader_standard,
+#                    'segmented': test_loader_segmented,
+#                    'relabeled': test_loader_relabeled},
+#            metas={'raw': test_meta_raw,
+#                   'standard': test_meta_standard,
+#                   'segmented': test_meta_segmented,
+#                   'relabeled': test_meta_relabeled})
 
 
 if TAG == 'segmented' or TAG == 'all':
@@ -152,8 +152,8 @@ if TAG == 'segmented' or TAG == 'all':
         val_windows_segmented, val_meta_segmented['classes'], val_meta_segmented['subjects'],
         batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
 
-    NAME = f"cnn_segmented_trp{RUN}"
-    model = CNN()
+    NAME = f"mhcnn_segmented_trp{RUN}"
+    model = MHCNN()
     print(model, f"\nParameters count: {count_params(model):,}")
 
     if MODE == "train":
@@ -179,7 +179,6 @@ if TAG == 'segmented' or TAG == 'all':
                   'relabeled': test_meta_relabeled})
 
 
-
 if TAG == 'relabeled' or TAG == 'all':
     train_loader_relabeled = create_triplet_loader(
         train_windows_relabeled, train_meta_relabeled['classes'], train_meta_relabeled['subjects'],
@@ -188,8 +187,8 @@ if TAG == 'relabeled' or TAG == 'all':
         val_windows_relabeled, val_meta_relabeled['classes'], val_meta_relabeled['subjects'],
         batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
 
-    NAME = f"cnn_relabeled_trp{RUN}"
-    model = CNN()
+    NAME = f"mhcnn_relabeled_trp{RUN}"
+    model = MHCNN()
     print(model, f"\nParameters count: {count_params(model):,}")
 
     if MODE == "train":
