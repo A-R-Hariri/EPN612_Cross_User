@@ -174,11 +174,7 @@ class LSTM_HCF(nn.Module):
         return logits
 
 
-# ──────────────────────────────────────────────
-# CNN baselines and proposed model
-# ──────────────────────────────────────────────
-
-class CNN_Basic(nn.Module):
+class CNN(nn.Module):
     """
     Single-scale CNN on raw EMG, single window.
     Ablation of MHCNN: isolates the contribution of
@@ -277,7 +273,7 @@ class GRL(nn.Module):
     def forward(self, x):
         return _GRLFn.apply(x, self.lambd)
     
-class CNN_GRL(nn.Module):
+class MHCNN_GRL(nn.Module):
     def __init__(self, ch=CH, seq=SEQ, emb_dim=128, 
                  num_classes=CLASSES, num_grl=306,
                  lambd=1.0, dropout=DROPOUT):
