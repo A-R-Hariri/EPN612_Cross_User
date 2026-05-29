@@ -41,7 +41,7 @@ class MHCNN(nn.Module):
 
     def forward(self, x, return_emb=False, return_logits=False):
         # x: (B, 8, 40)
-        x = x / 128.0
+        x = x / 128.0       # Scaling, not normalization
         x1 = self.drop(self.relu(self.conv1(x)))
         x2 = self.drop(self.relu(self.conv2(x)))
         x3 = self.drop(self.relu(self.conv3(x)))
@@ -204,7 +204,7 @@ class CNN(nn.Module):
 
     def forward(self, x, return_emb=False, return_logits=False):
         # x: (B, 8, 40)
-        x = x / 128.0
+        x = x / 128.0         # Scaling, not normalization
         x = self.drop(self.relu(self.conv1(x)))
         x = self.drop(self.relu(self.conv2(x)))
         x = self.drop(self.relu(self.conv3(x)))
@@ -312,7 +312,7 @@ class MHCNN_GRL(nn.Module):
 
     def forward(self, x, return_emb=False, 
                 return_logits=False, return_grl=False):
-        x = x / 128.0
+        x = x / 128.0         # Scaling, not normalization
 
         x1 = self.relu(self.conv1(x))
         x1 = self.drop(x1)
