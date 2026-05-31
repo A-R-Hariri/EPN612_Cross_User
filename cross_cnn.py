@@ -72,7 +72,7 @@ weights = torch.tensor(compute_class_weight('balanced',
 weights = None if TAG == 'raw' else weights         # raw is already ~balanced
 
 
-NAME = f"mhcnn_{TAG}_base"
+NAME = f"cross_mhcnn_{TAG}_base"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -95,7 +95,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"mhcnn_{TAG}_std"
+NAME = f"cross_mhcnn_{TAG}_std"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -118,7 +118,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"mhcnn_{TAG}_cvar"
+NAME = f"cross_mhcnn_{TAG}_cvar"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -141,7 +141,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"mhcnn_{TAG}_rest"
+NAME = f"cross_mhcnn_{TAG}_rest"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -164,7 +164,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"mhcnn_{TAG}_act"
+NAME = f"cross_mhcnn_{TAG}_act"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -187,7 +187,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"mhcnn_{TAG}_grl"
+NAME = f"cross_mhcnn_{TAG}_grl"
 model = MHCNN_GRL()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -211,7 +211,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"mhcnn_{TAG}_sbj"
+NAME = f"cross_mhcnn_{TAG}_sbj"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -234,7 +234,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"mhcnn_{TAG}_proto"
+NAME = f"cross_mhcnn_{TAG}_proto"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -258,7 +258,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"mhcnn_{TAG}_1va"
+NAME = f"cross_mhcnn_{TAG}_1va"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":
@@ -282,7 +282,7 @@ eval_test(model=model, name=NAME,
                   'relabeled': test_meta_relabeled})
 
 
-NAME = f"mhcnn_{TAG}_ang"
+NAME = f"cross_mhcnn_{TAG}_ang"
 model = MHCNN()
 print(model, f"\nParameters count: {count_params(model):,}")
 if MODE == "train":

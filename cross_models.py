@@ -105,14 +105,14 @@ weights = None       # data already ~balanced; no reweighting needed
 #   key → (model_instance, train_data, val_data, test_data, name)
 
 REGISTRY = {
-    # 'lda': None,   # handled separately below, sklearn only
+    'lda': None,   # handled separately below, sklearn only
 
-    # 'mlp': dict(
-    #     model      = MLP(n_features=n_feat),
-    #     train_data = train_hcf,       # (N, 8)
-    #     val_data   = val_hcf,
-    #     test_data  = test_hcf,
-    # ),
+    'mlp': dict(
+        model      = MLP(n_features=n_feat),
+        train_data = train_hcf,       # (N, 8)
+        val_data   = val_hcf,
+        test_data  = test_hcf,
+    ),
 
     # LSTM on sub-windowed RMS: (B, 4, 8) 
     'lstm_hcf': dict(
@@ -122,35 +122,35 @@ REGISTRY = {
         test_data  = test_shcf,
     ),
 
-    # # raw EMG: (B, 8, 40)
-    # 'cnn_hcf': dict(
-    #     model      = CNN_HCF(n_feat_sub),
-    #     train_data = train_shcf.transpose(0, 2, 1),    # (N, 8, 4)
-    #     val_data   = val_shcf.transpose(0, 2, 1),
-    #     test_data  = test_shcf.transpose(0, 2, 1),
-    # ),
+    # raw EMG: (B, 8, 40)
+    'cnn_hcf': dict(
+        model      = CNN_HCF(n_feat_sub),
+        train_data = train_shcf.transpose(0, 2, 1),    # (N, 8, 4)
+        val_data   = val_shcf.transpose(0, 2, 1),
+        test_data  = test_shcf.transpose(0, 2, 1),
+    ),
 
-    # # raw EMG: (B, 8, 40)
-    # 'lstm': dict(
-    #     model      = LSTM(),
-    #     train_data = train_windows,   # (N, 8, 40)
-    #     val_data   = val_windows,
-    #     test_data  = test_windows,
-    # ),
+    # raw EMG: (B, 8, 40)
+    'lstm': dict(
+        model      = LSTM(),
+        train_data = train_windows,   # (N, 8, 40)
+        val_data   = val_windows,
+        test_data  = test_windows,
+    ),
 
-    # 'cnn': dict(
-    #     model      = CNN(),
-    #     train_data = train_windows,   # (N, 8, 40)
-    #     val_data   = val_windows,
-    #     test_data  = test_windows,
-    # ),
+    'cnn': dict(
+        model      = CNN(),
+        train_data = train_windows,   # (N, 8, 40)
+        val_data   = val_windows,
+        test_data  = test_windows,
+    ),
 
-    # 'mhcnn_raw_base': dict(
-    #     model      = MHCNN(),
-    #     train_data = train_windows,   # (N, 8, 40)
-    #     val_data   = val_windows,
-    #     test_data  = test_windows,
-    # ),
+    'mhcnn_raw_base': dict(
+        model      = MHCNN(),
+        train_data = train_windows,   # (N, 8, 40)
+        val_data   = val_windows,
+        test_data  = test_windows,
+    ),
 }
 
 for MODEL_KEY in REGISTRY.keys():
