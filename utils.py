@@ -32,9 +32,9 @@ else:
 
 
 DTYPE = np.float32
-PICKLE_PATH = 'pickles'; CHECKPOINT_PATH = 'checkpoints'; FIGURE_PATH = 'figures'
+PICKLE_PATH = 'pickles'; CHECKPOINT_PATH = 'checkpoints'; 
+FIGURE_PATH = 'figures'; RESULTS_PATH = f"{FIGURE_PATH}/results.csv"
 UPDATE_EVERY = 50; PRESIST_WORKER = False; PIN_MEMORY = True
-RESULTS_PATH = f"{FIGURE_PATH}/results.csv"
 
 SEQ = 40; INC = 5; CH = 8; CLASSES = 5; VAL_CUTOFF = 332
 WORKERS = 4; PRE_FETCH = 2; VERBOSE=True; DEVICE = 'cuda'
@@ -612,7 +612,8 @@ def train_triplet(model, train_loader, val_loader, name,
     wait = 0
     best_epoch = 0
 
-    os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
+    if save_chkp:
+        os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
 
     ep = 1
     while ep <= epochs:
@@ -1046,7 +1047,8 @@ def eval_test(model, loaders, metas, name,
     model.eval()
     results = {}
 
-    os.makedirs(f"{FIGURE_PATH}/{name}/", exist_ok=True)
+    if save:
+        os.makedirs(f"{FIGURE_PATH}/{name}/", exist_ok=True)
 
     def run(loader, meta, tag):
         N = len(loader.dataset)
@@ -1096,39 +1098,40 @@ def eval_test(model, loaders, metas, name,
 
         acc, act_acc, bal_acc = acc * 100, act_acc * 100, bal_acc * 100
 
-        fig, axs = plt.subplots(2, 2, figsize=(11, 11), dpi=200)
-        ax1, ax2, ax3, ax4 = axs.flatten()
-        fig.suptitle(
-            f"{tag} | Mean Acc {acc.mean():.2f} ± {np.std(acc):.2f} "
-            f"| Mean Actv {act_acc.mean():.2f} ± {np.std(act_acc):.2f} "
-            f"| Mean Bal {bal_acc.mean():.2f} ± {np.std(bal_acc):.2f} "
-            f"| Mean F1 {f1.mean():.2f} ± {np.std(f1):.2f}"
-        )
-        
-        _idx = np.argsort(bal_acc)
-
-        ax1.bar(np.arange(n_subj), acc[_idx])
-        ax1.axhline(acc.mean(), color='red', linestyle='--')
-        ax1.set_title('Per Subject Accuracy')
-        
-        ax2.bar(np.arange(n_subj), act_acc[_idx])
-        ax2.axhline(act_acc.mean(), color='red', linestyle='--')
-        ax2.set_title('Per Subject Active Accuracy')
-
-        ax3.bar(np.arange(n_subj), bal_acc[_idx])
-        ax3.axhline(bal_acc.mean(), color='red', linestyle='--')
-        ax3.set_title('Per Subject Balanced Accuracy')
-
-        ax4.bar(np.arange(n_subj), f1[_idx])
-        ax4.axhline(f1.mean(), color='red', linestyle='--')
-        ax4.set_title('Per F1 Score')
-
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
-        fig.savefig(f"{FIGURE_PATH}/{name}/{tag}.jpg")
-        fig.clf()
-        plt.close(fig)
-
         if save:
+            fig, axs = plt.subplots(2, 2, figsize=(11, 11), dpi=200)
+            ax1, ax2, ax3, ax4 = axs.flatten()
+            fig.suptitle(
+                f"{tag} | Mean Acc {acc.mean():.2f} ± {np.std(acc):.2f} "
+                f"| Mean Actv {act_acc.mean():.2f} ± {np.std(act_acc):.2f} "
+                f"| Mean Bal {bal_acc.mean():.2f} ± {np.std(bal_acc):.2f} "
+                f"| Mean F1 {f1.mean():.2f} ± {np.std(f1):.2f}"
+            )
+            
+            _idx = np.argsort(bal_acc)
+
+            ax1.bar(np.arange(n_subj), acc[_idx])
+            ax1.axhline(acc.mean(), color='red', linestyle='--')
+            ax1.set_title('Per Subject Accuracy')
+            
+            ax2.bar(np.arange(n_subj), act_acc[_idx])
+            ax2.axhline(act_acc.mean(), color='red', linestyle='--')
+            ax2.set_title('Per Subject Active Accuracy')
+
+            ax3.bar(np.arange(n_subj), bal_acc[_idx])
+            ax3.axhline(bal_acc.mean(), color='red', linestyle='--')
+            ax3.set_title('Per Subject Balanced Accuracy')
+
+            ax4.bar(np.arange(n_subj), f1[_idx])
+            ax4.axhline(f1.mean(), color='red', linestyle='--')
+            ax4.set_title('Per F1 Score')
+
+            fig.tight_layout(rect=[0, 0, 1, 0.95])
+            
+            fig.savefig(f"{FIGURE_PATH}/{name}/{tag}.jpg")
+            fig.clf()
+            plt.close(fig)
+
             os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
             np.save(f"{CHECKPOINT_PATH}/{name}/results_{tag}.npy", 
                     np.stack((acc, act_acc, bal_acc, f1)))
@@ -1495,7 +1498,7 @@ def train_ddp(model, train_loader, val_loader, name,
     if IS_MAIN:
         if save_chkp:
             checkpoint = {'epoch': best_epoch,
-            'model_state_dict': model.state_dict()}
+            'model_state_dict': model.module.state_dict()}
             if save_chkp: 
                 torch.save(checkpoint, f"{CHECKPOINT_PATH}/{name}/{name}.pt")
     return model
