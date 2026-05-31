@@ -7,25 +7,17 @@ import copy
 from utils import *
 
 
-def subsample_rest(windows, labels, subjects, keep_every_k=4):
-    """
-    Stride-subsample rest windows only.
-    Every other class untouched.
-    
-    windows  : (N, 8, 40)
-    labels   : (N,)
-    subjects : (N,)
-    """
+def subsample_rest(windows, labels, subjects, reps, keep_every_k=4):
     rest_idx   = np.where(labels == 0)[0]
     active_idx = np.where(labels != 0)[0]
     
     kept_rest  = rest_idx[::keep_every_k]
     keep_all   = np.sort(np.concatenate([kept_rest, active_idx]))
     
-    print(f"Rest:   {len(rest_idx):,} → {len(kept_rest):,}")
-    print(f"Active: {len(active_idx):,} → unchanged")
+    print(f"Rest:   {len(rest_idx):,} -> {len(kept_rest):,}")
+    print(f"Active: {len(active_idx):,} -> unchanged")
     
-    return windows[keep_all], labels[keep_all], subjects[keep_all]
+    return windows[keep_all], labels[keep_all], subjects[keep_all], reps[keep_all]
 
 #======== DATA ========
 os.makedirs(PICKLE_PATH, exist_ok=True)
@@ -48,27 +40,27 @@ np.save(join(PICKLE_PATH, 'val_data_raw'), val_data)
 np.save(join(PICKLE_PATH, 'test_data_raw'), test_data)
 
 train_windows, train_meta = train_data.parse_windows(SEQ, INC)
-train_windows, train_meta['classes'], train_meta['subjects'] = subsample_rest(
-                    train_windows, train_meta['classes'], train_meta['subjects']
-                    )
+train_windows, train_meta['classes'], train_meta['subjects'], train_meta['reps'] = subsample_rest(
+                    train_windows, train_meta['classes'], train_meta['subjects'], train_meta['reps'])
+train_meta['base_class'] = train_meta['classes']
 np.save(join(PICKLE_PATH, 'train_windows_raw'), train_windows.astype(DTYPE))
 np.save(join(PICKLE_PATH, 'train_meta_raw'), train_meta)
 del train_windows
 gc.collect()
 
 val_windows, val_meta = val_data.parse_windows(SEQ, INC)
-val_windows, val_meta['classes'], val_meta['subjects'] = subsample_rest(
-                    val_windows, val_meta['classes'], val_meta['subjects']
-                    )
+val_windows, val_meta['classes'], val_meta['subjects'], val_meta['reps'] = subsample_rest(
+                    val_windows, val_meta['classes'], val_meta['subjects'], val_meta['reps'])
+val_meta['base_class'] = val_meta['classes']
 np.save(join(PICKLE_PATH, 'val_windows_raw'), val_windows.astype(DTYPE))
 np.save(join(PICKLE_PATH, 'val_meta_raw'), val_meta)
 del val_windows
 gc.collect()
 
 test_windows, test_meta = test_data.parse_windows(SEQ, INC)
-test_windows, test_meta['classes'], test_meta['subjects'] = subsample_rest(
-                    test_windows, test_meta['classes'], test_meta['subjects']
-                    )
+test_windows, test_meta['classes'], test_meta['subjects'], test_meta['reps'] = subsample_rest(
+                    test_windows, test_meta['classes'], test_meta['subjects'], test_meta['reps'])
+test_meta['base_class'] = test_meta['classes']
 np.save(join(PICKLE_PATH, 'test_windows_raw'), test_windows.astype(DTYPE))
 np.save(join(PICKLE_PATH, 'test_meta_raw'), test_meta)
 del test_windows
@@ -215,6 +207,18 @@ np.save(join(PICKLE_PATH, 'train_data_segmented'), train_data_segmented)
 np.save(join(PICKLE_PATH, 'val_data_segmented'), val_data_segmented)
 np.save(join(PICKLE_PATH, 'test_data_segmented'), test_data_segmented)
 
+train_windows_segmented, train_meta_segmented['classes'], train_meta_segmented['subjects'], train_meta_segmented['reps'] = subsample_rest(
+                    train_windows_segmented, train_meta_segmented['classes'], train_meta_segmented['subjects'], train_meta_segmented['reps'])
+train_meta_segmented['base_class'] = train_meta_segmented['classes']
+
+val_windows_segmented, val_meta_segmented['classes'], val_meta_segmented['subjects'], val_meta_segmented['reps'] = subsample_rest(
+                    val_windows_segmented, val_meta_segmented['classes'], val_meta_segmented['subjects'], val_meta_segmented['reps'])
+val_meta_segmented['base_class'] = val_meta_segmented['classes']
+
+test_windows_segmented, test_meta_segmented['classes'], test_meta_segmented['subjects'], test_meta_segmented['reps'] = subsample_rest(
+                    test_windows_segmented, test_meta_segmented['classes'], test_meta_segmented['subjects'], test_meta_segmented['reps'])
+test_meta_segmented['base_class'] = test_meta_segmented['classes']
+
 np.save(join(PICKLE_PATH, 'train_windows_segmented'), train_windows_segmented.astype(DTYPE))
 np.save(join(PICKLE_PATH, 'train_meta_segmented'), train_meta_segmented)
 np.save(join(PICKLE_PATH, 'val_windows_segmented'), val_windows_segmented.astype(DTYPE))
@@ -327,6 +331,18 @@ X, y = train_data.parse_windows(SEQ, INC)
 X_v, y_v = val_data.parse_windows(SEQ, INC)
 X_t, y_t = test_data.parse_windows(SEQ, INC)
 
+X, y['classes'], y['subjects'], y['reps'] = subsample_rest(
+                    X, y['classes'], y['subjects'], y['reps'])
+y['base_class'] = y['classes']
+
+X_v, y_v['classes'], y_v['subjects'], y_v['reps'] = subsample_rest(
+                    X_v, y_v['classes'], y_v['subjects'], y_v['reps'])
+y_v['base_class'] = y_v['classes']
+
+X_t, y_t['classes'], y_t['subjects'], y_t['reps'] = subsample_rest(
+                    X_t, y_t['classes'], y_t['subjects'], y_t['reps'])
+y_t['base_class'] = y_t['classes']
+
 np.save(join(PICKLE_PATH, 'train_windows_relabeled'), X.astype(DTYPE))
 np.save(join(PICKLE_PATH, 'train_meta_relabeled'), y)
 np.save(join(PICKLE_PATH, 'val_windows_relabeled'), X_v.astype(DTYPE))
@@ -429,6 +445,18 @@ for i in range(len(test_data.data)):
 X, y = train_data_standard.parse_windows(SEQ, INC)
 X_v, y_v = val_data_standard.parse_windows(SEQ, INC)
 X_t, y_t = test_data_standard.parse_windows(SEQ, INC)
+
+X, y['classes'], y['subjects'], y['reps'] = subsample_rest(
+                    X, y['classes'], y['subjects'], y['reps'])
+y['base_class'] = y['classes']
+
+X_v, y_v['classes'], y_v['subjects'], y_v['reps'] = subsample_rest(
+                    X_v, y_v['classes'], y_v['subjects'], y_v['reps'])
+y_v['base_class'] = y_v['classes']
+
+X_t, y_t['classes'], y_t['subjects'], y_t['reps'] = subsample_rest(
+                    X_t, y_t['classes'], y_t['subjects'], y_t['reps'])
+y_t['base_class'] = y_t['classes']
 
 np.save(join(PICKLE_PATH, 'train_windows_standard'), X.astype(DTYPE))
 np.save(join(PICKLE_PATH, 'train_meta_standard'), y)
