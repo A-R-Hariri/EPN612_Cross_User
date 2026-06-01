@@ -82,7 +82,7 @@ if TAG == 'raw' or TAG == 'all':
         val_windows_raw, val_meta_raw['classes'], val_meta_raw['subjects'],
         batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
 
-    NAME = f"mhcnn_raw_trp{RUN}"
+    NAME = f"cross_mhcnn_raw_trp{RUN}"
     model = MHCNN()
     print(model, f"\nParameters count: {count_params(model):,}")
 
@@ -117,7 +117,7 @@ if TAG == 'raw' or TAG == 'all':
 #         val_windows_standard, val_meta_standard['classes'], val_meta_standard['subjects'],
 #         batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
 
-#     NAME = f"mhcnn_standard_trp{RUN}"
+#     NAME = f"cross_mhcnn_standard_trp{RUN}"
 #     model = MHCNN()
 #     print(model, f"\nParameters count: {count_params(model):,}")
 
@@ -152,7 +152,7 @@ if TAG == 'segmented' or TAG == 'all':
         val_windows_segmented, val_meta_segmented['classes'], val_meta_segmented['subjects'],
         batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
 
-    NAME = f"mhcnn_segmented_trp{RUN}"
+    NAME = f"cross_mhcnn_segmented_trp{RUN}"
     model = MHCNN()
     print(model, f"\nParameters count: {count_params(model):,}")
 
@@ -187,7 +187,7 @@ if TAG == 'relabeled' or TAG == 'all':
         val_windows_relabeled, val_meta_relabeled['classes'], val_meta_relabeled['subjects'],
         batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
 
-    NAME = f"mhcnn_relabeled_trp{RUN}"
+    NAME = f"cross_mhcnn_relabeled_trp{RUN}"
     model = MHCNN()
     print(model, f"\nParameters count: {count_params(model):,}")
 

@@ -145,7 +145,7 @@ REGISTRY = {
         test_data  = test_windows,
     ),
 
-    'mhcnn_raw_base': dict(
+    'mhcnn': dict(
         model      = MHCNN(),
         train_data = train_windows,   # (N, 8, 40)
         val_data   = val_windows,
