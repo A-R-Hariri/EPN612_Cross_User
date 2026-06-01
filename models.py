@@ -440,7 +440,7 @@ class PerSubjectLoss(nn.Module):
         
         per_user = loss_sum / counts.clamp_min(1)
         
-        return per_user.mean()
+        return per_user.mean() + per_user.std(unbiased=False)
     
 
 class CVaRLoss(nn.Module):
