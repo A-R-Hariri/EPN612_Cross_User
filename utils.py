@@ -44,6 +44,7 @@ _GESTURE_LABELS = {0: "NM", 1: "HC", 2: "FX", 3: "EX", 4: "HO"}
 EPOCHS = 300; BATCH_SIZE = 2048; DROPOUT = 0.2; PATIENCE = 15
 LR_FACTOR = 0.6; LR_PATIENCE = 7; LR_INIT = 5e-4; LR_MIN = 1e-6
 
+RN_PRIOR_WEIGHT = 0
 N_SUB     = 4       # 4 sub-windows × 10 samples = 40 samples total
 SAMPLING_RATE = 200
 FEATURE_DIC = {
@@ -1672,7 +1673,7 @@ def normalize_per_user(windows, subjects, eps=1e-6):
 class RunningNorm(nn.Module):
     def __init__(self, num_channels, tau,
                  init_mean=None, init_std=None,
-                 eps=1e-5, prior_weight=800):   # 20s at 40 windows/s
+                 eps=1e-6, prior_weight=RN_PRIOR_WEIGHT):   
         """
         tau: time constant in windows.
              tau=inf  → exact cumulative mean (session ceiling).
