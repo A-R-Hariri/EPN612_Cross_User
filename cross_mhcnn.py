@@ -13,12 +13,18 @@ from utils import *
 from models import *
 
 
+TAG = sys.argv[2] if len(sys.argv) > 2 else "raw"
+NORM = sys.argv[3] == 'norm' if len(sys.argv) > 3 else False
+_requested = set(sys.argv[4:]) if len(sys.argv) > 4 else {'all'}
+MODE = sys.argv[5] if len(sys.argv) > 5 else "train"
+
 SEED = 13; random.seed(SEED); np.random.seed(SEED)
 GENERATOR = torch.manual_seed(SEED)
 MMAP_MODE = 'r'; SAVE_CHKP = True
 
-TAG = sys.argv[2] if len(sys.argv) > 2 else "raw"
-MODE = sys.argv[3] if len(sys.argv) > 3 else "train"
+N_SUBJECTS = 306; MARGIN = 0.5; W_HARD = 1.0; W_SOFT = 0.0
+ALPHA_START = 0.01; ALPHA_END = 0.25; WARMUP = 25
+TAU = float('inf')
 
 
 # ======== LOAD DATA ========
@@ -37,270 +43,134 @@ test_windows_relabeled = np.load(join(PICKLE_PATH, 'test_windows_relabeled.npy')
 test_meta_relabeled = np.load(join(PICKLE_PATH, 'test_meta_relabeled.npy'), allow_pickle=True).item()
 
 
-# ======== PIPELINE ========
-train_loader = create_loader(train_windows, 
-                             train_meta['classes'], 
+# ======== ORACLE NORMALIZE ========
+if NORM:
+    pop_mean, pop_std = population_channel_stats(train_windows)
+    train_windows = normalize_per_user(train_windows, train_meta['subjects']) * 128.0
+    val_windows = normalize_per_user(val_windows, val_meta['subjects']) * 128.0
+
+
+# ======== LOADERS ========
+train_loader = create_loader(train_windows,
+                             train_meta['classes'],
                              train_meta['subjects'],
                              batch=BATCH_SIZE, shuffle=True)
 val_loader = create_loader(val_windows,
-                           val_meta['classes'], 
+                           val_meta['classes'],
                            val_meta['subjects'],
                            batch=BATCH_SIZE, shuffle=True)
 
-test_loader_raw = create_loader(test_windows_raw, 
-                                test_meta_raw['classes'], 
-                                test_meta_raw['subjects'], 
+test_loader_raw = create_loader(test_windows_raw,
+                                test_meta_raw['classes'],
+                                test_meta_raw['subjects'],
                                 batch=BATCH_SIZE, shuffle=False)
-test_loader_standard = create_loader(test_windows_standard, 
+test_loader_standard = create_loader(test_windows_standard,
                                      test_meta_standard['classes'],
                                      test_meta_standard['subjects'],
                                      batch=BATCH_SIZE, shuffle=False)
-test_loader_segmented = create_loader(test_windows_segmented, 
-                                      test_meta_segmented['classes'], 
-                                      test_meta_segmented['subjects'], 
+test_loader_segmented = create_loader(test_windows_segmented,
+                                      test_meta_segmented['classes'],
+                                      test_meta_segmented['subjects'],
                                       batch=BATCH_SIZE, shuffle=False)
-test_loader_relabeled = create_loader(test_windows_relabeled, 
+test_loader_relabeled = create_loader(test_windows_relabeled,
                                       test_meta_relabeled['classes'],
                                       test_meta_relabeled['subjects'],
                                       batch=BATCH_SIZE, shuffle=False)
 
-weights = torch.tensor(compute_class_weight('balanced', 
-                                classes=np.arange(CLASSES), 
-                                y=train_meta['classes']),
-                                dtype=torch.float32,
-                                device=DEVICE)
-weights = None if TAG == 'raw' else weights         # raw is already ~balanced
+weights = torch.tensor(compute_class_weight('balanced',
+                                            classes=np.arange(CLASSES),
+                                            y=train_meta['classes']),
+                       dtype=torch.float32, device=DEVICE)
+weights = None if TAG == 'raw' else weights
 
 
-NAME = f"cross_mhcnn_{TAG}_base"
-model = MHCNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=BaseLoss(weight=weights),
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
+# ======== PIPELINE ========
+_eval_loaders = dict(raw=test_loader_raw, standard=test_loader_standard,
+                     segmented=test_loader_segmented, relabeled=test_loader_relabeled)
+_eval_metas = dict(raw=test_meta_raw, standard=test_meta_standard,
+                   segmented=test_meta_segmented, relabeled=test_meta_relabeled)
+_eval_windows = dict(raw=(test_windows_raw, test_meta_raw),
+                     standard=(test_windows_raw, test_meta_standard),
+                     segmented=(test_windows_raw, test_meta_segmented),
+                     relabeled=(test_windows_raw, test_meta_relabeled))
+
+def _make_triplet_loaders():
+    tl = create_triplet_loader(train_windows, train_meta['classes'], train_meta['subjects'],
+                               batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=N_SUBJECTS)
+    vl = create_triplet_loader(val_windows, val_meta['classes'], val_meta['subjects'],
+                               batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
+    return tl, vl
 
 
-NAME = f"cross_mhcnn_{TAG}_std"
-model = MHCNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=STDLoss(),
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
+# -------- model configs --------
+CONFIGS = {
+    'base': dict(model_cls=MHCNN, train_fn=train,
+                 train_kwargs=dict(loss_fn=BaseLoss(weight=weights))),
+    'std': dict(model_cls=MHCNN, train_fn=train,
+                train_kwargs=dict(loss_fn=STDLoss())),
+    'cvar': dict(model_cls=MHCNN, train_fn=train,
+                 train_kwargs=dict(loss_fn=CVaRLoss(weight=weights))),
+    'rest': dict(model_cls=MHCNN, train_fn=train,
+                 train_kwargs=dict(loss_fn=RestLoss(weight=weights))),
+    'act': dict(model_cls=MHCNN, train_fn=train,
+                train_kwargs=dict(loss_fn=ActiveLoss(weight=weights))),
+    'grl': dict(model_cls=MHCNN_GRL, train_fn=train_grl,
+                train_kwargs=dict(loss_fn=BaseLoss(weight=weights),
+                                  loss_fn_sbj=nn.CrossEntropyLoss())),
+    'sbj': dict(model_cls=MHCNN, train_fn=train_sbj,
+                train_kwargs=dict(loss_fn=PerSubjectLoss(weight=weights))),
+    'proto': dict(model_cls=MHCNN, train_fn=train,
+                  train_kwargs=dict(loss_fn=PrototypeLoss(weight=weights),
+                                    return_emb=True, return_logits=True)),
+    '1va': dict(model_cls=MHCNN, train_fn=train,
+                train_kwargs=dict(loss_fn=OneVsAllLoss(weight=weights),
+                                  return_emb=True, return_logits=True)),
+    'ang': dict(model_cls=MHCNN, train_fn=train,
+                train_kwargs=dict(loss_fn=AngularLoss(weight=weights),
+                                  return_emb=True, return_logits=True)),
+    'trp': dict(model_cls=MHCNN, train_fn=train_triplet,
+                loader_fn=_make_triplet_loaders,
+                ckpt_key=None,
+                train_kwargs=dict(
+                    criterion_ce=nn.CrossEntropyLoss(weight=None),
+                    criterion_tri=TripletLoss(margin=MARGIN, batch_hard=True,
+                                              w_hard=W_HARD, w_soft=W_SOFT),
+                    epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
+                    lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE,
+                    patience=PATIENCE, alpha_start=ALPHA_START,
+                    alpha_end=ALPHA_END, warmup_epochs=WARMUP)),
+}
 
 
-NAME = f"cross_mhcnn_{TAG}_cvar"
-model = MHCNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=CVaRLoss(weight=weights),
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
+to_run = list(CONFIGS) if 'all' in _requested else [k for k in CONFIGS if k in _requested]
 
+for variant in to_run:
+    cfg = CONFIGS[variant]
+    NAME = f"cross_mhcnn_{TAG}_{variant}" + ('-rn' if NORM else '')
 
-NAME = f"cross_mhcnn_{TAG}_rest"
-model = MHCNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=RestLoss(weight=weights),
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
+    model = cfg['model_cls']()
+    print(model, f"\nParameters count: {count_params(model):,}")
 
+    if 'loader_fn' in cfg:
+        torch.cuda.empty_cache()
+        gc.collect()
+        run_train_loader, run_val_loader = cfg['loader_fn']()
+    else:
+        run_train_loader, run_val_loader = train_loader, val_loader
 
-NAME = f"cross_mhcnn_{TAG}_act"
-model = MHCNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=ActiveLoss(weight=weights),
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
+    if MODE == 'train':
+        cfg['train_fn'](model=model, name=NAME,
+                        train_loader=run_train_loader,
+                        val_loader=run_val_loader,
+                        save_chkp=SAVE_CHKP,
+                        **cfg['train_kwargs'])
+    else:
+        ckpt = torch.load(join(CHECKPOINT_PATH, NAME, f"{NAME}.pt"))
+        key = cfg.get('ckpt_key', 'model_state_dict')
+        model.load_state_dict(ckpt if key is None else ckpt[key])
 
-
-NAME = f"cross_mhcnn_{TAG}_grl"
-model = MHCNN_GRL()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train_grl(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=BaseLoss(weight=weights),
-          loss_fn_sbj=nn.CrossEntropyLoss(),
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = f"cross_mhcnn_{TAG}_sbj"
-model = MHCNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train_sbj(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=PerSubjectLoss(weight=weights),
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = f"cross_mhcnn_{TAG}_proto"
-model = MHCNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=PrototypeLoss(weight=weights),
-          return_emb=True, return_logits=True,
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = f"cross_mhcnn_{TAG}_1va"
-model = MHCNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=OneVsAllLoss(weight=weights),
-          return_emb=True, return_logits=True,
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
-
-
-NAME = f"cross_mhcnn_{TAG}_ang"
-model = MHCNN()
-print(model, f"\nParameters count: {count_params(model):,}")
-if MODE == "train":
-    train(model=model, name=NAME, 
-          train_loader=train_loader,
-          val_loader=val_loader, 
-          loss_fn=AngularLoss(weight=weights),
-          return_emb=True, return_logits=True,
-          save_chkp=SAVE_CHKP)
-else:
-    model.load_state_dict(torch.load(join
-        (CHECKPOINT_PATH, NAME, f"{NAME}.pt"))['model_state_dict'])
-eval_test(model=model, name=NAME, 
-          loaders={'raw': test_loader_raw,
-                   'standard': test_loader_standard,
-                   'segmented': test_loader_segmented,
-                   'relabeled': test_loader_relabeled},
-           metas={'raw': test_meta_raw,
-                  'standard': test_meta_standard,
-                  'segmented': test_meta_segmented,
-                  'relabeled': test_meta_relabeled})
+    if not NORM:
+        eval_test(model=model, name=NAME, loaders=_eval_loaders, metas=_eval_metas)
+    else:
+        eval_test_running(model, RunningNorm(CH, TAU, pop_mean, pop_std),
+                          _eval_windows, NAME, SEED)
