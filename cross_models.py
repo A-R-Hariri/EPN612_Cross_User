@@ -102,7 +102,7 @@ weights = torch.tensor(
 weights = None       # data already ~balanced; no reweighting needed
 
 # model registry
-#   key → (model_instance, train_data, val_data, test_data, name)
+#   key -> (model_instance, train_data, val_data, test_data, name)
 
 REGISTRY = {
     'lda': None,   # handled separately below, sklearn only
@@ -114,7 +114,6 @@ REGISTRY = {
         test_data  = test_hcf,
     ),
 
-    # LSTM on sub-windowed RMS: (B, 4, 8) 
     'lstm_hcf': dict(
         model      = LSTM_HCF(n_feat_sub, n_sub=N_SUB),
         train_data = train_shcf,    # (N, 4, 8)
@@ -122,7 +121,6 @@ REGISTRY = {
         test_data  = test_shcf,
     ),
 
-    # raw EMG: (B, 8, 40)
     'cnn_hcf': dict(
         model      = CNN_HCF(n_feat_sub),
         train_data = train_shcf.transpose(0, 2, 1),    # (N, 8, 4)
@@ -130,7 +128,6 @@ REGISTRY = {
         test_data  = test_shcf.transpose(0, 2, 1),
     ),
 
-    # raw EMG: (B, 8, 40)
     'lstm': dict(
         model      = LSTM(),
         train_data = train_windows,   # (N, 8, 40)
