@@ -28,8 +28,7 @@ MMAP_MODE = 'r'; SAVE_CHKP = False
 
 
 TAG = sys.argv[2] if len(sys.argv) > 2 else "raw"
-REPS = sys.argv[3].split(',') if len(sys.argv) > 3 else 15
-REPS = list(map(int, REPS))
+REPS = set(sys.argv[3:]) if len(sys.argv) > 3 else {15}
 FT = sys.argv[4] == 'ft' if len(sys.argv) > 4 else False
 
 # ======== LOAD DATA ========
