@@ -24,8 +24,7 @@ Best cross-user zero-shot accuracy **80%** on held-out subjects with no calibrat
 - `models.py`, `utils.py`: shared model and training utilities
 - `cross_*.py`: cross-user training per architecture
 - `within_*.py`: within-user baselines and fine-tuning ablations
-- `increment_cnn_raw.py`, `inc_rank_cnn_raw.py`: incremental adaptation
-- `Analysis.ipynb`: aggregated results and figures
+- `inc_*_.py`: incremental reps/subjects trauining for analysis
 
 ## Author
 
