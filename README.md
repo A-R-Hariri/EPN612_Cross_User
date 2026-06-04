@@ -1,6 +1,6 @@
 # Cross-User Zero-Shot EMG Gesture Classification on EPN612
 
-End-to-end benchmark for user-invariant EMG gesture classification. Models train on a population of users and are evaluated zero-shot on held-out subjects with no per-user calibration. This is the precondition for any EMG interface that ships beyond the lab, since per-user calibration breaks under electrode shift, sweat, fatigue, and time.
+End-to-end model design and benchmark for cross-user EMG gesture classification. Models train on a population of users and are evaluated zero-shot on held-out subjects with no per-user calibration. This is the precondition for any EMG interface that ships beyond the lab, since per-user calibration breaks under electrode shift, sweat, fatigue, and time.
 
 ## Dataset
 
@@ -12,7 +12,7 @@ EPN-612: 612 subjects, 5 hand gestures plus rest, 8-channel Myo armband at 200 H
 - Input representations: raw windows, segmented windows, hand-crafted feature sets
 - Cross-user training with embedding-based variants (metric learning, gradient reversal)
 - Within-user baselines and fine-tuning ablations (standard, segmented, raw)
-- Incremental user adaptation experiments
+- Incremental reps/users experiments
 
 ## Results
 
