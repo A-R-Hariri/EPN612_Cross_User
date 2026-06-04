@@ -16,7 +16,7 @@ EPN-612: 612 subjects, 5 hand gestures plus rest, 8-channel Myo armband at 200 H
 
 ## Results
 
-Best cross-user zero-shot accuracy **80%** on held-out subjects with no calibration. Within-user upper bound **85%**.
+Best cross-user zero-shot accuracy from 77% baseline to **81%** on held-out subjects with no calibration. Within-user upper bound **90%**.
 
 ## Repo layout
 
