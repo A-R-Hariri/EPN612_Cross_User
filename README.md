@@ -21,10 +21,12 @@ Best cross-user zero-shot accuracy from 77% baseline to **81%** on held-out subj
 ## Repo layout
 
 - `process_epn612.py`, `EPN612.py`: dataset ingestion and windowing
-- `models.py`, `utils.py`: shared model and training utilities
-- `cross_*.py`: cross-user training per architecture
+- `models.py`, `utils.py`: shared model, losses, and training utilities
+- `cross_feats.py`: feature grid search
+- `cross_models.py`: cross-user model comparison
+- `cross_mhcnn.py`: cross-user training for the proposed model and losses
 - `within_*.py`: within-user baselines and fine-tuning ablations
-- `inc_*_.py`: incremental reps/subjects trauining for analysis
+- `inc_mhcnn.py`: incremental reps/subjects trauining for analysis
 
 ## Author
 
