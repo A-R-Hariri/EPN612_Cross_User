@@ -46,6 +46,11 @@ LR_FACTOR = 0.6; LR_PATIENCE = 7; LR_INIT = 5e-4; LR_MIN = 1e-6
 
 RN_PRIOR_WEIGHT = 0
 N_SUB     = 4       # 4 sub-windows × 10 samples = 40 samples total
+
+N_SUBJECTS = 306; MARGIN = 0.5; W_HARD = 1.0; W_SOFT = 0.0
+ALPHA_START = 0.01; ALPHA_END = 0.25; WARMUP = 25
+TAU = float('inf')
+
 SAMPLING_RATE = 200
 FEATURE_DIC = {
                'WENG_fs': SAMPLING_RATE,
@@ -239,6 +244,13 @@ def create_triplet_loader(x, y, subjects,
         persistent_workers=persistent_workers,
         pin_memory=pin_memory)
 
+def make_triplet_loaders(train_windows, train_meta,
+                          val_windows, val_meta, s=N_SUBJECTS, sv=26):
+    tl = create_triplet_loader(train_windows, train_meta['classes'], train_meta['subjects'],
+                               batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=s)
+    vl = create_triplet_loader(val_windows, val_meta['classes'], val_meta['subjects'],
+                               batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=sv)
+    return tl, vl
 
 # ======== TRAINING & VALIDATING ========
 def train(model, train_loader, val_loader, name,
