@@ -15,16 +15,12 @@ from models import *
 
 TAG = sys.argv[2] if len(sys.argv) > 2 else "raw"
 NORM = sys.argv[3] == 'norm' if len(sys.argv) > 3 else False
-_requested = set(sys.argv[4:]) if len(sys.argv) > 4 else {'all'}
+_requested = sys.argv[4].split(',') if len(sys.argv) > 4 else ['all']
 MODE = sys.argv[5] if len(sys.argv) > 5 else "train"
 
 SEED = 13; random.seed(SEED); np.random.seed(SEED)
 GENERATOR = torch.manual_seed(SEED)
 MMAP_MODE = 'r'; SAVE_CHKP = True
-
-N_SUBJECTS = 306; MARGIN = 0.5; W_HARD = 1.0; W_SOFT = 0.0
-ALPHA_START = 0.01; ALPHA_END = 0.25; WARMUP = 25
-TAU = float('inf')
 
 
 # ======== LOAD DATA ========
@@ -94,42 +90,35 @@ _eval_windows = dict(raw=(test_windows_raw, test_meta_raw),
                      segmented=(test_windows_raw, test_meta_segmented),
                      relabeled=(test_windows_raw, test_meta_relabeled))
 
-def _make_triplet_loaders():
-    tl = create_triplet_loader(train_windows, train_meta['classes'], train_meta['subjects'],
-                               batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=N_SUBJECTS)
-    vl = create_triplet_loader(val_windows, val_meta['classes'], val_meta['subjects'],
-                               batch=BATCH_SIZE, n_classes=CLASSES, n_subjects=26)
-    return tl, vl
-
 
 # -------- model configs --------
 CONFIGS = {
     'base': dict(model_cls=MHCNN, train_fn=train,
-                 train_kwargs=dict(loss_fn=BaseLoss(weight=weights))),
+                 loss_fn=BaseLoss, train_kwargs=dict()),
     'std': dict(model_cls=MHCNN, train_fn=train,
-                train_kwargs=dict(loss_fn=STDLoss())),
+                s_fn=STDLoss, train_kwargs=dict()),
     'cvar': dict(model_cls=MHCNN, train_fn=train,
-                 train_kwargs=dict(loss_fn=CVaRLoss(weight=weights))),
+                 loss_fn=CVaRLoss, train_kwargs=dict()),
     'rest': dict(model_cls=MHCNN, train_fn=train,
-                 train_kwargs=dict(loss_fn=RestLoss(weight=weights))),
+                 loss_fn=RestLoss, train_kwargs=dict()),
     'act': dict(model_cls=MHCNN, train_fn=train,
-                train_kwargs=dict(loss_fn=ActiveLoss(weight=weights))),
+                loss_fn=ActiveLoss, train_kwargs=dict()),
     'grl': dict(model_cls=MHCNN_GRL, train_fn=train_grl,
-                train_kwargs=dict(loss_fn=BaseLoss(weight=weights),
-                                  loss_fn_sbj=nn.CrossEntropyLoss())),
+                loss_fn=BaseLoss, train_kwargs=dict(
+                    loss_fn_sbj=nn.CrossEntropyLoss())),
     'sbj': dict(model_cls=MHCNN, train_fn=train_sbj,
-                train_kwargs=dict(loss_fn=PerSubjectLoss(weight=weights))),
+                loss_fn=PerSubjectLoss, train_kwargs=dict()),
     'proto': dict(model_cls=MHCNN, train_fn=train,
-                  train_kwargs=dict(loss_fn=PrototypeLoss(weight=weights),
-                                    return_emb=True, return_logits=True)),
+                  loss_fn=PrototypeLoss, train_kwargs=dict(
+                      return_emb=True, return_logits=True)),
     '1va': dict(model_cls=MHCNN, train_fn=train,
-                train_kwargs=dict(loss_fn=OneVsAllLoss(weight=weights),
-                                  return_emb=True, return_logits=True)),
+                loss_fn=OneVsAllLoss, train_kwargs=dict(
+                    return_emb=True, return_logits=True)),
     'ang': dict(model_cls=MHCNN, train_fn=train,
-                train_kwargs=dict(loss_fn=AngularLoss(weight=weights),
-                                  return_emb=True, return_logits=True)),
+                loss_fn=AngularLoss, train_kwargs=dict(
+                    return_emb=True, return_logits=True)),
     'trp': dict(model_cls=MHCNN, train_fn=train_triplet,
-                loader_fn=_make_triplet_loaders,
+                loader_fn=make_triplet_loaders,
                 ckpt_key=None,
                 train_kwargs=dict(
                     criterion_ce=nn.CrossEntropyLoss(weight=None),
@@ -154,12 +143,14 @@ for variant in to_run:
     if 'loader_fn' in cfg:
         torch.cuda.empty_cache()
         gc.collect()
-        run_train_loader, run_val_loader = cfg['loader_fn']()
+        run_train_loader, run_val_loader = cfg['loader_fn'](train_windows, train_meta,
+                                                            val_windows, val_meta)
     else:
         run_train_loader, run_val_loader = train_loader, val_loader
 
     if MODE == 'train':
         cfg['train_fn'](model=model, name=NAME,
+                        loss_fn=cfg['loss_fn'](weight=weights),
                         train_loader=run_train_loader,
                         val_loader=run_val_loader,
                         save_chkp=SAVE_CHKP,

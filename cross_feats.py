@@ -21,7 +21,7 @@ from models import *
 # config
 MODE      = "train"
 MMAP_MODE = 'r'
-SAVE_CHKP = True
+SAVE_CHKP = False
 
 MODEL_KEYS = [
               'lda', 
@@ -49,9 +49,9 @@ feature_groups = {
 dist.init_process_group(backend="nccl")
 LOCAL_RANK = int(os.environ["LOCAL_RANK"])
 WORLD_SIZE = dist.get_world_size()
-RANK       = dist.get_rank()
+RANK = dist.get_rank()
 torch.cuda.set_device(LOCAL_RANK)
-DEVICE  = f"cuda:{LOCAL_RANK}"
+DEVICE = f"cuda:{LOCAL_RANK}"
 IS_MAIN = (RANK == 0)
 
 SEED = 13 + RANK
@@ -60,11 +60,11 @@ random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
 # load raw windows once
 TAG = 'raw'
 train_windows = np.load(join(PICKLE_PATH, f'train_windows_{TAG}.npy'), mmap_mode=MMAP_MODE)
-train_meta    = np.load(join(PICKLE_PATH, f'train_meta_{TAG}.npy'),    allow_pickle=True).item()
-val_windows   = np.load(join(PICKLE_PATH, f'val_windows_{TAG}.npy'),   mmap_mode=MMAP_MODE)
-val_meta      = np.load(join(PICKLE_PATH, f'val_meta_{TAG}.npy'),      allow_pickle=True).item()
-test_windows  = np.load(join(PICKLE_PATH, f'test_windows_{TAG}.npy'),  mmap_mode=MMAP_MODE)
-test_meta     = np.load(join(PICKLE_PATH, f'test_meta_{TAG}.npy'),     allow_pickle=True).item()
+train_meta = np.load(join(PICKLE_PATH, f'train_meta_{TAG}.npy'), allow_pickle=True).item()
+val_windows = np.load(join(PICKLE_PATH, f'val_windows_{TAG}.npy'), mmap_mode=MMAP_MODE)
+val_meta = np.load(join(PICKLE_PATH, f'val_meta_{TAG}.npy'), allow_pickle=True).item()
+test_windows = np.load(join(PICKLE_PATH, f'test_windows_{TAG}.npy'),  mmap_mode=MMAP_MODE)
+test_meta = np.load(join(PICKLE_PATH, f'test_meta_{TAG}.npy'), allow_pickle=True).item()
 
 # main search loop
 for feat_key, feat_list in feature_groups.items():
@@ -80,20 +80,20 @@ for feat_key, feat_list in feature_groups.items():
 
     # extract features
     # full window: (N, F) for LDA and MLP
-    tr_full  = extract_full(train_windows, feat_list, feat_dic)
-    va_full  = extract_full(val_windows,   feat_list, feat_dic)
-    te_full  = extract_full(test_windows,  feat_list, feat_dic)
-    n_feat   = tr_full.shape[1]   # CH x n_feats_per_channel
+    tr_full = extract_full(train_windows, feat_list, feat_dic)
+    va_full = extract_full(val_windows, feat_list, feat_dic)
+    te_full = extract_full(test_windows, feat_list, feat_dic)
+    n_feat = tr_full.shape[1]   # CH x n_feats_per_channel
 
     # sub-windowed: (N, 4, F) for LSTM and CNN_Feat
-    tr_sub   = extract_sub(train_windows, feat_list, feat_dic)
-    va_sub   = extract_sub(val_windows,   feat_list, feat_dic)
-    te_sub   = extract_sub(test_windows,  feat_list, feat_dic)
+    tr_sub = extract_sub(train_windows, feat_list, feat_dic)
+    va_sub = extract_sub(val_windows, feat_list, feat_dic)
+    te_sub = extract_sub(test_windows, feat_list, feat_dic)
     n_feat_sub = tr_sub.shape[-1]  # F per sub-window
 
     # normalize - fit on train only
     tr_full, va_full, te_full = normalize_features(tr_full, va_full, te_full)
-    tr_sub,  va_sub,  te_sub  = normalize_features(tr_sub,  va_sub,  te_sub)
+    tr_sub, va_sub, te_sub = normalize_features(tr_sub,  va_sub,  te_sub)
 
     # class weights
     weights = None   # data already balanced; no reweighting needed
@@ -114,11 +114,11 @@ for feat_key, feat_list in feature_groups.items():
             continue
 
         if model_key == 'mlp':
-            model     = MLP(n_features=n_feat)
+            model = MLP(n_features=n_feat)
             tr_data, va_data, te_data = tr_full, va_full, te_full
 
         elif model_key == 'lstm_hcf':
-            model     = LSTM_HCF(n_features=n_feat_sub, n_sub=N_SUB)
+            model = LSTM_HCF(n_features=n_feat_sub, n_sub=N_SUB)
             tr_data, va_data, te_data = tr_sub, va_sub, te_sub
 
         elif model_key == 'cnn_hcf':
@@ -126,9 +126,9 @@ for feat_key, feat_list in feature_groups.items():
             # input: (B, n_feat_sub, N_SUB) - features as channels, sub-windows as time
             model     = CNN_HCF(n_feat=n_feat_sub, n_sub=N_SUB)
             # CNN_Feat expects channel-first: transpose (N, 4, F) -> (N, F, 4)
-            tr_data   = tr_sub.transpose(0, 2, 1)
-            va_data   = va_sub.transpose(0, 2, 1)
-            te_data   = te_sub.transpose(0, 2, 1)
+            tr_data = tr_sub.transpose(0, 2, 1)
+            va_data = va_sub.transpose(0, 2, 1)
+            te_data = te_sub.transpose(0, 2, 1)
 
         # DDP setup 
         model = model.to(DEVICE)
@@ -168,6 +168,7 @@ for feat_key, feat_list in feature_groups.items():
 
         if IS_MAIN:
             eval_test(model=model.module, name=name,
+                    csv_path = RESULTS_PATH,
                     loaders={feat_key: test_loader},
                     metas={feat_key: test_meta})
 
