@@ -27,6 +27,7 @@ Best cross-user zero-shot accuracy from 77% baseline to **81%** on held-out subj
 - `cross_mhcnn.py`: cross-user training for the proposed model and losses
 - `within_*.py`: within-user baselines and fine-tuning ablations
 - `inc_mhcnn.py`: incremental reps/subjects trauining for analysis
+- `Analysis_PCA.py`: PCA projection of the latent space of trained model from each epoch's checkpoint on the test set
 
 ## Author
 
