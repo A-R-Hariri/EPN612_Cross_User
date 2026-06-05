@@ -95,18 +95,9 @@ for rep in REPS:
                 model = MHCNN()
                 
                 if FT:
-                    try:
-                        model.load_state_dict(torch.load(join
-                            (CHECKPOINT_PATH, f'mhcnn_{TAG}_{l_name}', 
-                            f'mhcnn_{TAG}_{l_name}.pt'))['model_state_dict'])
-                    except:
-                        checkpoint = torch.load(join
-                            (CHECKPOINT_PATH, f'mhcnn_{TAG}_{l_name}', 
-                            f'mhcnn_{TAG}_{l_name}.pt'))['model_state_dict']
-                        new_state_dict = {}
-                        for k, v in checkpoint.items():
-                            new_state_dict[k.replace("module.", "")] = v
-                        model.load_state_dict(new_state_dict)
+                    model.load_state_dict(torch.load(join
+                        (CHECKPOINT_PATH, f'cross_mhcnn_{TAG}_{l_name}', 
+                        f'cross_mhcnn_{TAG}_{l_name}.pt'))['model_state_dict'])
 
                 weights = torch.tensor(compute_class_weight('balanced', 
                                             classes=np.arange(CLASSES), 

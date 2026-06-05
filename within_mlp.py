@@ -128,18 +128,9 @@ for rep in REPS:
                 model = MLP(n_feat_full)
 
                 if FT:
-                    try:
-                        model.load_state_dict(torch.load(join
-                            (CHECKPOINT_PATH, f'mlp', 
-                            f'mlp.pt'))['model_state_dict'])
-                    except:
-                        checkpoint = torch.load(join
-                            (CHECKPOINT_PATH, f'mlp', 
-                            f'mlp.pt'))['model_state_dict']
-                        new_state_dict = {}
-                        for k, v in checkpoint.items():
-                            new_state_dict[k.replace("module.", "")] = v
-                        model.load_state_dict(new_state_dict)
+                    model.load_state_dict(torch.load(join
+                        (CHECKPOINT_PATH, f'mlp', 
+                        f'mlp.pt'))['model_state_dict'])
                     
                 weights = torch.tensor(compute_class_weight('balanced', 
                                             classes=np.arange(CLASSES), 

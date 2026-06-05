@@ -132,19 +132,10 @@ for rep in REPS:
                 model = CNN_HCF(n_feat_sub)
 
                 if FT:
-                    try:
-                        model.load_state_dict(torch.load(join
-                            (CHECKPOINT_PATH, f'cnn_hcf', 
-                            f'cnn_hcf.pt'))['model_state_dict'])
-                    except:
-                        checkpoint = torch.load(join
-                            (CHECKPOINT_PATH, f'cnn_hcf', 
-                            f'cnn_hcf.pt'))['model_state_dict']
-                        new_state_dict = {}
-                        for k, v in checkpoint.items():
-                            new_state_dict[k.replace("module.", "")] = v
-                        model.load_state_dict(new_state_dict)
-                    
+                    model.load_state_dict(torch.load(join
+                        (CHECKPOINT_PATH, f'cnn_hcf', 
+                        f'cnn_hcf.pt'))['model_state_dict'])
+
                 weights = torch.tensor(compute_class_weight('balanced', 
                                             classes=np.arange(CLASSES), 
                                                 y=train_meta['classes']),
