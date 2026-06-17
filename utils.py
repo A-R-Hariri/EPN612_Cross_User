@@ -743,7 +743,7 @@ def train_triplet(model, train_loader, val_loader, name,
 
 
 # ---- EMBEDDING PCA CALLBACK ----
-# ── PCA ──────────────────────────────────────────────────────────────────────
+# PCA 
 class PCA_GPU:
     def __init__(self, dims=2, device=DEVICE):
         self.device = device
@@ -771,7 +771,7 @@ class PCA_GPU:
         return self.transform(X)
 
 
-# ── Collect embeddings ───────────────────────────────────────────────────────
+# Collect embeddings
 @torch.no_grad()
 def collect_embeddings(model, loader, device):
     model.eval()
@@ -809,7 +809,7 @@ def collect_embeddings(model, loader, device):
             labels.to(device, non_blocking=True))
 
 
-# ── Plot worker (runs in thread, never touches GPU) ──────────────────────────
+# Plot worker (runs in thread, never touches GPU)
 def _plot_epoch(Z, y, title, path):
     dims = Z.shape[1]
 
@@ -865,7 +865,7 @@ def _plot_epoch(Z, y, title, path):
     plt.close(fig)
 
 
-# ── PCA sweep ────────────────────────────────────────────────────────────────
+# PCA sweep
 @torch.no_grad()
 def run_pca_sweep(model, loader, name, dims=2,
                   device=DEVICE, n_plot_workers=4):
@@ -883,7 +883,7 @@ def run_pca_sweep(model, loader, name, dims=2,
 
     model.to(device).eval()
 
-    # ── Pass 1: fit PCA on last epoch ────────────────────────────────────────
+    # Pass 1: fit PCA on last epoch
     best = torch.load(f"{checkpoint_dir}/{name}.pt", map_location=device)
     model.load_state_dict(best["model_state_dict"])
     best_ep = best["epoch"]
@@ -892,7 +892,7 @@ def run_pca_sweep(model, loader, name, dims=2,
     pca = PCA_GPU(dims=dims, device=device).fit(feats)
     del feats; torch.cuda.empty_cache()
 
-    # ── Pass 2: stream + transform + plot (plot in background thread) ────────
+    # Pass 2: stream + transform + plot (plot in background thread)
     with ThreadPoolExecutor(max_workers=n_plot_workers) as pool:
         for i, f in enumerate(epoch_files):
             print(f"{i+1}/{len(epoch_files)}")
@@ -909,8 +909,7 @@ def run_pca_sweep(model, loader, name, dims=2,
             pool.submit(
                 _plot_epoch, Z, y,
                 f"{name} | Epoch {epoch}",
-                f"{output_dir}/ep_{epoch:03d}.png"
-            )
+                f"{output_dir}/ep_{epoch:03d}.png")
         # ThreadPoolExecutor.__exit__ joins all pending saves before returning
             if epoch == best_ep:
                 break
@@ -1161,8 +1160,8 @@ def eval_test(model, loaders, metas, name,
         results[tag] = run(loaders[tag], metas[tag], tag)
 
     # Atomic CSV logging (Fastest concurrent-safe method)
-    rows = [{"model": name, "test set": tag, **r} for tag, r in results.items()]
-    empty_row = {k: "" for k in rows[0].keys()}
+    rows = [{"model": name, "test_set": tag, **r} for tag, r in results.items()]
+    # empty_row = {k: "" for k in rows[0].keys()}
     df_new = pd.DataFrame(rows)
     df_new.to_csv(csv_path, mode='a', index=False, header=not os.path.exists(csv_path))
 
@@ -1347,7 +1346,7 @@ def eval_test_lda(model, X, metas, name, save=True,
     for tag in X.keys():
         results[tag] = run(X[tag], metas[tag], tag)
 
-    rows = [{"model": name, "test set": tag, **r} for tag, r in results.items()]
+    rows = [{"model": name, "test_set": tag, **r} for tag, r in results.items()]
     df_new = pd.DataFrame(rows)
     df_new.to_csv(csv_path, mode='a', index=False,
                   header=not os.path.exists(csv_path))
@@ -1523,9 +1522,9 @@ def evaluate_ddp(model, loader, loss_fn,
                  device, world_size, return_std=False):
     model.eval()
     loss_fn.eval()
-    lsum        = torch.tensor(0.0, device=device)
-    cor         = torch.tensor(0.0, device=device)
-    tot         = torch.tensor(0,   device=device, dtype=torch.long)
+    lsum = torch.tensor(0.0, device=device)
+    cor = torch.tensor(0.0, device=device)
+    tot = torch.tensor(0, device=device, dtype=torch.long)
     val_conf_matrix = torch.zeros((CLASSES, CLASSES), device=device)
     user_conf_matrices = {}  # {user_id: (CLASSES, CLASSES) tensor}
 
@@ -1543,13 +1542,13 @@ def evaluate_ddp(model, loader, loss_fn,
                 loss = loss_fn(emb, yb)
             else:
                 logits = model(xb)
-                loss   = loss_fn(logits, yb)
+                loss = loss_fn(logits, yb)
 
         preds = logits.argmax(1)
 
         lsum += loss.detach()
-        cor  += (preds == yb).sum()
-        tot  += yb.numel()
+        cor += (preds == yb).sum()
+        tot += yb.numel()
 
         idx = (yb * CLASSES + preds).clamp(0, CLASSES * CLASSES - 1)
         val_conf_matrix += torch.bincount(idx, minlength=CLASSES * CLASSES).float().view(CLASSES, CLASSES)
@@ -1599,17 +1598,12 @@ def evaluate_ddp(model, loader, loss_fn,
 
 
 def extract_full(windows, feat_list, feat_dic):
-    """Full window features. Returns (N, CH*n_feats) → (N, F)"""
     fe = FeatureExtractor()
     return fe.extract_features(feat_list, windows, array=True,
                                fix_feature_errors=True,
                                feature_dic=feat_dic).reshape(windows.shape[0], -1)
 
 def extract_sub(windows, feat_list, feat_dic, n_sub=N_SUB):
-    """
-    Split each (N, CH, T) window into n_sub sub-windows of (N, CH, T//n_sub),
-    extract features on each, return (N, n_sub, F).
-    """
     fe = FeatureExtractor()
     N, CH, T = windows.shape
     assert T % n_sub == 0, f"T={T} not divisible by n_sub={n_sub}"
@@ -1624,14 +1618,6 @@ def extract_sub(windows, feat_list, feat_dic, n_sub=N_SUB):
 
 
 def normalize_features(tr, va, te):
-    """
-    Fit StandardScaler on training data only.
-    Apply to val and test without leaking test statistics.
-
-    Works for both:
-      full window : (N, F)
-      sub-windowed: (N, N_SUB, F) — reshape, scale, reshape back
-    """
     shape_tr = tr.shape
     shape_va = va.shape
     shape_te = te.shape
@@ -1655,15 +1641,14 @@ def normalize_features(tr, va, te):
 
 
 def population_channel_stats(windows, batch=200_000):
-    """Compute raw per-channel mean and std. Pass raw (non-normalized) windows."""
     N, C, T = windows.shape
     s1 = np.zeros(C, np.float64)
     s2 = np.zeros(C, np.float64)
     count = 0
     for i in range(0, N, batch):
         c = np.asarray(windows[i:i+batch], dtype=np.float64)
-        s1    += c.sum(axis=(0, 2))
-        s2    += (c * c).sum(axis=(0, 2))
+        s1 += c.sum(axis=(0, 2))
+        s2 += (c * c).sum(axis=(0, 2))
         count += c.shape[0] * T
     mean = (s1 / count).astype(np.float32)
     std  = np.sqrt(np.clip(s2 / count - (s1/count)**2, 0, None)).astype(np.float32)
@@ -1686,12 +1671,7 @@ class RunningNorm(nn.Module):
     def __init__(self, num_channels, tau,
                  init_mean=None, init_std=None,
                  eps=1e-6, prior_weight=RN_PRIOR_WEIGHT):   
-        """
-        tau: time constant in windows.
-             tau=inf  → exact cumulative mean (session ceiling).
-             tau=N    → EMA that closes 63% of a step change in N windows.
-        alpha per-window = 1 - exp(-1/tau), batch-size invariant by construction.
-        """
+        
         super().__init__()
         self.tau = tau
         self.eps = eps
@@ -1703,10 +1683,10 @@ class RunningNorm(nn.Module):
         im  = im.view(1, -1, 1)
         ist = ist.view(1, -1, 1)
 
-        self.register_buffer("init_mean",    im.clone())
-        self.register_buffer("init_sq",      (ist**2 + im**2).clone())
+        self.register_buffer("init_mean", im.clone())
+        self.register_buffer("init_sq", (ist**2 + im**2).clone())
         self.register_buffer("running_mean", im.clone())
-        self.register_buffer("running_sq",   (ist**2 + im**2).clone())
+        self.register_buffer("running_sq", (ist**2 + im**2).clone())
         self.register_buffer("n_updates", torch.tensor([float(prior_weight)], dtype=torch.float32))
         self.prior_weight = float(prior_weight)
 
@@ -1831,8 +1811,275 @@ def eval_test_running(model, norm_layer, data, name, seed,
                         "bal_acc_mean": bal.mean(), "bal_acc_std": bal.std(),
                         "F1": f1.mean(), "F1_std": f1.std()}
 
-    rows = [{"model": name, "test set": tag, **r} for tag, r in results.items()]
+    rows = [{"model": name, "test_set": tag, **r} for tag, r in results.items()]
     pd.DataFrame(rows).to_csv(csv_path, mode='a', index=False,
                               header=not os.path.exists(csv_path))
 
     return results
+
+
+import math
+from dataclasses import dataclass
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from utils import *
+
+
+# ======== AUGMENTATION CONFIG ========
+@dataclass
+class AugConfig:
+    """
+    Strength and per sample application probability of each transform.
+    All amplitudes are expressed on the raw signed 8 bit ADC scale, i.e.
+    the same scale the windows are stored in, before the model divides
+    by 128.0 internally.
+    """
+    # per sample probability that each transform is applied
+    p_rotate: float = 0.5
+    p_gain: float = 0.5
+    p_warp: float = 0.5
+    p_noise: float = 0.5
+
+    # electrode rotation: armband donning position around the forearm ring
+    rot_max: int = 1            # max shift in electrode positions, plus or minus
+    rot_mode: str = 'discrete'  # 'discrete' integer pod shift, 'interp' sub pod blend
+
+    # amplitude gain: per electrode coupling, muscle size, overall effort
+    gain_chan: float = 0.25     # per channel half range, log uniform
+    gain_global: float = 0.15   # whole sample half range, log uniform
+
+    # magnitude warp: slow non stationary amplitude drift within a window
+    warp_sigma: float = 0.15    # std of the warp curve in the log domain
+    warp_knots: int = 4         # random knots interpolated up to window length
+
+    # additive noise: sensor noise floor and per session SNR differences
+    noise_snr: float = 0.05     # noise std as a fraction of per channel RMS
+    noise_floor: float = 1.0    # absolute noise std floor, ADC units
+
+    # keep augmented values inside the signed 8 bit ADC range
+    clamp_adc: bool = True
+    adc_min: float = -128.0
+    adc_max: float = 127.0
+
+
+# ======== EMG AUGMENTER ========
+class EMGAugment(nn.Module):
+    """
+    On the fly, fully GPU vectorized augmentation for 8 channel Myo EMG.
+    Input is a raw ADC scale batch of shape (B, C, T). Output has the
+    same shape. Every transform is selected per sample with a boolean
+    mask and torch.where, so nothing forces a host device sync and the
+    whole batch stays on the GPU.
+
+    Each transform targets a physical source of the cross subject and
+    cross session variability that a larger user population provides for
+    free, which is what zero shot training is trying to substitute:
+
+      rotate : the band is donned at a different rotation, so each
+               electrode sits over a different muscle. On a circular
+               electrode ring this is a cyclic shift of the channels.
+      gain   : skin electrode impedance, subcutaneous fat, muscle cross
+               section and effort all rescale amplitude, differently per
+               electrode. This is the user specific amplitude factor the
+               encoder otherwise latches onto. Drawn log uniform so a
+               1.25x and a 0.8x gain are equally likely.
+      warp   : contraction intensity is not stationary across a 200 ms
+               window. A smooth positive multiplicative envelope models
+               that drift without changing the gesture identity.
+      noise  : zero mean Gaussian at a controlled SNR per channel,
+               modelling the electrical noise floor and session to
+               session SNR changes from sweat, skin prep and aging.
+
+    The transforms compose in donning order: first where the band sits
+    (rotate), then the coupling for that placement (gain), then the
+    within window effort drift (warp), then the noise floor on top
+    (noise).
+    """
+    def __init__(self, cfg: AugConfig = AugConfig()):
+        super().__init__()
+        self.cfg = cfg
+
+    # -------- electrode rotation --------
+    def _rotate(self, x, m):
+        B, C, T = x.shape
+        cfg = self.cfg
+        if cfg.rot_mode == 'interp':
+            # continuous sub pod rotation, linear blend of adjacent channels
+            shift = torch.empty(B, device=x.device).uniform_(-cfg.rot_max, cfg.rot_max)
+            shift = torch.where(m, shift, torch.zeros_like(shift))
+            pos = (torch.arange(C, device=x.device).view(1, C) - shift.view(B, 1)) % C
+            lo = torch.floor(pos)
+            frac = (pos - lo).view(B, C, 1)
+            i0 = (lo.long() % C).unsqueeze(-1).expand(B, C, T)
+            i1 = ((lo.long() + 1) % C).unsqueeze(-1).expand(B, C, T)
+            return (1.0 - frac) * torch.gather(x, 1, i0) + frac * torch.gather(x, 1, i1)
+        # integer pod shift, masked samples get shift 0 and stay unchanged
+        shift = torch.randint(-cfg.rot_max, cfg.rot_max + 1, (B,), device=x.device)
+        shift = torch.where(m, shift, torch.zeros_like(shift))
+        idx = (torch.arange(C, device=x.device).view(1, C) - shift.view(B, 1)) % C
+        idx = idx.unsqueeze(-1).expand(B, C, T)
+        return torch.gather(x, 1, idx)
+
+    # -------- amplitude gain --------
+    def _gain(self, x, m):
+        B, C, T = x.shape
+        cfg = self.cfg
+        lr_c = math.log(1.0 + cfg.gain_chan)
+        lr_g = math.log(1.0 + cfg.gain_global)
+        g_c = torch.empty(B, C, 1, device=x.device).uniform_(-lr_c, lr_c).exp()
+        g_g = torch.empty(B, 1, 1, device=x.device).uniform_(-lr_g, lr_g).exp()
+        g = torch.where(m.view(B, 1, 1), g_c * g_g, torch.ones_like(g_c))
+        return x * g
+
+    # -------- magnitude warp --------
+    def _warp(self, x, m):
+        B, C, T = x.shape
+        cfg = self.cfg
+        knots = torch.randn(B, C, cfg.warp_knots, device=x.device) * cfg.warp_sigma
+        curve = F.interpolate(knots, size=T, mode='linear', align_corners=True)
+        env = torch.where(m.view(B, 1, 1), curve.exp(), torch.ones_like(curve))
+        return x * env
+
+    # -------- additive noise --------
+    def _noise(self, x, m):
+        B, C, T = x.shape
+        cfg = self.cfg
+        rms = x.pow(2).mean(dim=2, keepdim=True).clamp_min(1e-8).sqrt()
+        sigma = cfg.noise_snr * rms + cfg.noise_floor
+        noise = torch.randn_like(x) * sigma
+        return x + torch.where(m.view(B, 1, 1), noise, torch.zeros_like(noise))
+
+    @torch.no_grad()
+    def forward(self, x):
+        cfg = self.cfg
+        B = x.shape[0]
+        dev = x.device
+        x = x.float()
+        if cfg.p_rotate > 0:
+            x = self._rotate(x, torch.rand(B, device=dev) < cfg.p_rotate)
+        if cfg.p_gain > 0:
+            x = self._gain(x, torch.rand(B, device=dev) < cfg.p_gain)
+        if cfg.p_warp > 0:
+            x = self._warp(x, torch.rand(B, device=dev) < cfg.p_warp)
+        if cfg.p_noise > 0:
+            x = self._noise(x, torch.rand(B, device=dev) < cfg.p_noise)
+        if cfg.clamp_adc:
+            x = x.clamp(cfg.adc_min, cfg.adc_max)
+        return x
+
+
+# ======== AUGMENTED TRAINING ========
+def train_aug(model, train_loader, val_loader, name,
+              loss_fn=nn.CrossEntropyLoss(),
+              augmenter=None, n_aug=1, keep_clean=True,
+              return_emb=False, return_logits=False,
+              epochs=EPOCHS, lr=LR_INIT, min_lr=LR_MIN,
+              lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE,
+              patience=PATIENCE, device=DEVICE,
+              verbose=VERBOSE, save_chkp=False):
+
+    model.to(device)
+    if augmenter is not None:
+        augmenter.to(device)
+    opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)
+    sch = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        opt, mode="min", factor=lr_factor, patience=lr_patience, min_lr=min_lr)
+    scaler = GradScaler(enabled=(device=="cuda"))
+
+    best_val = 1e9
+    best_state = {k: v.clone().cpu() for k, v in model.state_dict().items()}
+    wait = 0
+    best_epoch = 0
+
+    if save_chkp:
+        os.makedirs(f"{CHECKPOINT_PATH}/{name}/", exist_ok=True)
+
+    for ep in range(1, epochs + 1):
+        model.train()
+        total_loss = torch.tensor(0.0, device=device)
+        correct = torch.tensor(0.0, device=device)
+        total = 0
+        step = 0
+        pbar = tqdm(total=len(train_loader), desc=f"{name} | Ep {ep}",
+                    leave=True, dynamic_ncols=True, disable=not verbose)
+
+        for xb, yb, *_ in train_loader:
+            xb = xb.to(device, non_blocking=True)
+            yb = yb.to(device, non_blocking=True)
+
+            # -------- build augmented views --------
+            if augmenter is not None and (n_aug > 0):
+                with torch.no_grad():
+                    views = [xb] if keep_clean else []
+                    for _ in range(n_aug):
+                        views.append(augmenter(xb))
+                    xb = torch.cat(views, dim=0)
+                    yb = yb.repeat(len(views))
+
+            opt.zero_grad(set_to_none=True)
+            with autocast(device_type="cuda", enabled=(device=="cuda")):
+                if return_emb and return_logits:
+                    emb, logits = model(xb, return_emb=True, return_logits=True)
+                    loss = loss_fn(emb, logits, yb)
+                else:
+                    logits = model(xb)
+                    loss = loss_fn(logits, yb)
+
+            scaler.scale(loss).backward()
+            clip_grad_norm_(model.parameters(), 1.0)
+            scaler.step(opt)
+            scaler.update()
+
+            total_loss += loss.detach()
+            correct += (logits.argmax(1) == yb).sum()
+            total += yb.numel()
+            step += 1
+
+            if not (step % UPDATE_EVERY):
+                pbar.update(UPDATE_EVERY)
+                pbar.set_postfix(
+                    loss=f"{total_loss.item() / step:10.8f}",
+                    acc=f"{correct.item() / max(1, total):6.4f}",
+                    LR=f"{opt.param_groups[0]['lr']:8.6f}")
+
+        if step % UPDATE_EVERY:
+            pbar.update(step % UPDATE_EVERY)
+
+        val_acc, val_loss, val_bal, val_conf = evaluate(model, val_loader, loss_fn,
+                                                return_emb, return_logits, device)
+        sch.step(val_loss)
+
+        if val_loss < best_val:
+            best_val = val_loss
+            best_state = {k: v.clone().cpu() for k, v in model.state_dict().items()}
+            wait = 0
+            best_epoch = ep
+        else:
+            wait += 1
+            if wait >= patience:
+                if verbose:
+                    tqdm.write(f"{name} | Early stop")
+                pbar.close()
+                break
+
+        pbar.set_postfix(
+            loss=f"{total_loss.item() / max(1, len(train_loader)):10.6f}",
+            acc=f"{correct.item() / max(1, total):6.4f}",
+            val_loss=f"{val_loss:10.6f}",
+            val_acc=f"{val_acc:6.4f}",
+            val_bal=f"{val_bal:6.4f}",
+            LR=f"{opt.param_groups[0]['lr']:8.6f}",
+            wait=f"{wait:3.0f}")
+        pbar.close()
+
+        if save_chkp:
+            checkpoint = {'epoch': ep, 'model_state_dict': model.state_dict()}
+            torch.save(checkpoint, f"{CHECKPOINT_PATH}/{name}/chkp_{ep:03d}.pt")
+
+    model.load_state_dict(best_state)
+    checkpoint = {'epoch': best_epoch, 'model_state_dict': model.state_dict()}
+    if save_chkp:
+        torch.save(checkpoint, f"{CHECKPOINT_PATH}/{name}/{name}.pt")
+    return model

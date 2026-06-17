@@ -97,7 +97,6 @@ for rep in REPS:
                 data = data_s.isolate_data("reps", list(range(20, 25)), fast=True)
                 test_windows, test_meta = data.parse_windows(SEQ, INC)
 
-                # sub-windowed: (N, 4, F) for LSTM and CNN_Feat
                 train_windows   = extract_sub(train_windows, feat_list, feat_dic)
                 val_windows   = extract_sub(val_windows,   feat_list, feat_dic)
                 test_windows   = extract_sub(test_windows,  feat_list, feat_dic)
@@ -159,5 +158,6 @@ for rep in REPS:
                 gc.collect()
 
         _name = NAME.split('-')[0]
+        _name = f'{_name}{"-ft" if FT else ""}'
         os.makedirs(f"{CHECKPOINT_PATH}/{_name}/", exist_ok=True)
         np.save(f"{CHECKPOINT_PATH}/{_name}/results-{rep}.npy", results)

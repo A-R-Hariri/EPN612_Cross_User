@@ -155,5 +155,6 @@ for rep in REPS:
                 gc.collect()
 
         _name = NAME.split('-')[0]
+        _name = f'{_name}{"-ft" if FT else ""}'
         os.makedirs(f"{CHECKPOINT_PATH}/{_name}/", exist_ok=True)
         np.save(f"{CHECKPOINT_PATH}/{_name}/results-{rep}.npy", results)

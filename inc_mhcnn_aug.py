@@ -24,6 +24,23 @@ RUNS = list(map(int, RUNS))
 LOSS = sys.argv[4] if len(sys.argv) > 4 else "base"
 
 
+# ======== AUGMENTATION SETTINGS ========
+# Effective batch becomes batch * (N_AUG + KEEP_CLEAN). Set N_AUG=1 and
+# KEEP_CLEAN=False for in place augmentation with no batch growth.
+N_AUG = 2
+KEEP_CLEAN = True
+
+AUG_CFG = AugConfig(
+    p_rotate=0.5, p_gain=0.5, p_warp=0.5, p_noise=0.5,
+    rot_max=1, rot_mode='discrete',
+    gain_chan=0.25, gain_global=0.15,
+    warp_sigma=0.15, warp_knots=4,
+    noise_snr=0.05, noise_floor=1.0,
+    clamp_adc=True,
+)
+augmenter = EMGAugment(AUG_CFG)
+
+
 CONFIGS = {
     'base': dict(model_cls=MHCNN, train_fn=train,
                  loss_fn=BaseLoss, train_kwargs=dict()),
@@ -68,27 +85,20 @@ train_windows = np.load(join(PICKLE_PATH, f'train_windows_{TAG}.npy'), mmap_mode
 train_meta = np.load(join(PICKLE_PATH, f'train_meta_{TAG}.npy'), allow_pickle=True).item()
 val_windows = np.load(join(PICKLE_PATH, f'val_windows_{TAG}.npy'), mmap_mode=MMAP_MODE)
 val_meta = np.load(join(PICKLE_PATH, f'val_meta_{TAG}.npy'), allow_pickle=True).item()
-
 test_windows_raw = np.load(join(PICKLE_PATH, f'test_windows_raw.npy'), mmap_mode=MMAP_MODE)
 test_meta_raw = np.load(join(PICKLE_PATH, f'test_meta_raw.npy'), allow_pickle=True).item()
-test_windows_standard = np.load(join(PICKLE_PATH, 'test_windows_standard.npy'), mmap_mode=MMAP_MODE)
-test_meta_standard = np.load(join(PICKLE_PATH, 'test_meta_standard.npy'), allow_pickle=True).item()
-test_windows_segmented = np.load(join(PICKLE_PATH, 'test_windows_segmented.npy'), mmap_mode=MMAP_MODE)
-test_meta_segmented = np.load(join(PICKLE_PATH, 'test_meta_segmented.npy'), allow_pickle=True).item()
-test_windows_relabeled = np.load(join(PICKLE_PATH, 'test_windows_relabeled.npy'), mmap_mode=MMAP_MODE)
-test_meta_relabeled = np.load(join(PICKLE_PATH, 'test_meta_relabeled.npy'), allow_pickle=True).item()
 
 
 # ======== PIPELINE ========
-val_loader = create_loader(val_windows, val_meta['classes'], val_meta['subjects'], 
+val_loader = create_loader(val_windows, val_meta['classes'], val_meta['subjects'],
                             batch=BATCH_SIZE, shuffle=False)
-test_loader = create_loader(test_windows_raw, test_meta_raw['classes'], test_meta_raw['subjects'], 
+test_loader = create_loader(test_windows_raw, test_meta_raw['classes'], test_meta_raw['subjects'],
                             batch=BATCH_SIZE, shuffle=False)
 
 cfg = CONFIGS[LOSS]
 base_ids = train_meta['subjects']
 results = {}
-_name = f"inc_mhcnn_{TAG}_{LOSS}"
+_name = f"inc_mhcnn_aug_{TAG}_{LOSS}"
 
 for i in RUNS:
 
@@ -115,17 +125,17 @@ for i in RUNS:
         train_meta['subjects'] = np.vectorize(mapping.get)(base_ids.copy())
 
     for s in [
-              1, 2, 4, 8, 16, 
-              32, 64, 128, 
+              1, 2, 4, 8, 16,
+              32, 64, 128,
               196, 306,
               ]:
         for r in [
-                  1, 2, 4, 8, 16, 
+                  1, 2, 4, 8, 16,
                   24, 32, 40, 50,
                   ]:
             print("S, R:", s, r)
             NAME = _name + f"-{i}_s{s}_r{r}"
-            indx = (np.isin(train_meta['subjects'], np.arange(s)) & 
+            indx = (np.isin(train_meta['subjects'], np.arange(s)) &
                     np.isin(train_meta['reps'], np.arange(r)))
             X = train_windows[indx]
             y = train_meta['classes'][indx]
@@ -137,13 +147,12 @@ for i in RUNS:
             train_loader = create_loader(X, y, ys,
                 batch=_BATCH_SIZE, shuffle=True)
 
-            weights = torch.tensor(compute_class_weight('balanced', 
-                classes=np.arange(CLASSES), 
+            weights = torch.tensor(compute_class_weight('balanced',
+                classes=np.arange(CLASSES),
                 y=y),
                 dtype=torch.float32,
                 device=DEVICE)
             weights = None if TAG == 'raw' else weights         # raw is already ~balanced
-
             if 'loader_fn' in cfg:
                 torch.cuda.empty_cache()
                 gc.collect()
@@ -151,14 +160,16 @@ for i in RUNS:
                                                                     val_windows, val_meta)
             else:
                 run_train_loader, run_val_loader = train_loader, val_loader
-                
+
             model = cfg['model_cls']()
-            cfg['train_fn'](model=model, name=NAME,
-                            loss_fn=cfg['loss_fn'](weight=weights),
-                            train_loader=run_train_loader,
-                            val_loader=run_val_loader,
-                            save_chkp=SAVE_CHKP, verbose=VERBOSE,
-                            **cfg['train_kwargs'])
+            train_aug(model=model, name=NAME,
+                      loss_fn=cfg['loss_fn'](weight=weights),
+                      train_loader=train_loader,
+                      val_loader=val_loader,
+                      augmenter=augmenter, n_aug=N_AUG, keep_clean=KEEP_CLEAN,
+                      save_chkp=SAVE_CHKP, verbose=VERBOSE,
+                      **cfg['train_kwargs'])
+
             result = eval_test(model=model, name=NAME, save=False,
                     loaders={'raw': test_loader},
                     csv_path=f"{FIGURE_PATH}/{_name}-{i}.csv",

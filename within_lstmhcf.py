@@ -26,11 +26,35 @@ SEED = 13; random.seed(SEED); np.random.seed(SEED)
 GENERATOR = torch.manual_seed(SEED)
 MMAP_MODE = 'r'; SAVE_CHKP = False
 
-
 TAG = sys.argv[2] if len(sys.argv) > 2 else "raw"
 REPS = sys.argv[3].split(',') if len(sys.argv) > 3 else [15]
 REPS = list(map(int, REPS))
 FT = sys.argv[4] == 'ft' if len(sys.argv) > 4 else False
+
+
+feature_groups = {
+    'HTD':   ['MAV', 'ZC', 'SSC', 'WL'],
+    'TSTD':  ['MAVFD','DASDV','WAMP','ZC','MFL','SAMPEN',
+               'M0','M2','M4','SPARSI','IRF','WLF'],
+    'DFTR':  ['DFTR'],
+    'ITD':   ['ISD','COR','MDIFF','MLK'],
+    'HJORTH':['ACT','MOB','COMP'],
+    'LS4':   ['LS', 'MFL', 'MSR', 'WAMP'],
+    'LS9':   ['LS', 'MFL', 'MSR', 'WAMP', 'ZC', 'RMS',
+               'IAV', 'DASDV', 'VAR'],
+    'TDPSD': ['M0','M2','M4','SPARSI','IRF','WLF'],
+    'TDAR':  ['MAV', 'ZC', 'SSC', 'WL', 'AR'],
+    'COMB':  ['WL', 'SSC', 'LD', 'AR9'],
+    'MSWT':  ['WENG','WV','WWL','WENT'],
+    'RMS':   ['RMS'],
+    'WENG':  ['WENG'],
+}
+feat_list = feature_groups['WENG'] # Decided based on cross_feats.py
+feat_dic = {}
+for f in feat_list:
+    if f in [k.split('_')[0] for k in FEATURE_DIC.keys()]:
+        feat_dic[f + '_fs'] = SAMPLING_RATE
+
 
 # ======== LOAD DATA ========
 train_data = np.load(join(PICKLE_PATH, f'train_data_{TAG}.npy'), allow_pickle=True).item()
@@ -50,7 +74,7 @@ for rep in REPS:
                         # (AngularLoss, 'ang'),
                         ]:
         
-        NAME = f'within_mhcnn_{TAG}_{l_name}{"-ft" if FT else ""}-{rep}'
+        NAME = f'within_lstmhcf_{TAG}_{l_name}{"-ft" if FT else ""}-{rep}'
         results = []
 
         ranges = [(0, 306), (306, 332), (332, 612)]
@@ -73,6 +97,14 @@ for rep in REPS:
                 data = data_s.isolate_data("reps", list(range(20, 25)), fast=True)
                 test_windows, test_meta = data.parse_windows(SEQ, INC)
 
+                train_windows   = extract_sub(train_windows, feat_list, feat_dic)
+                val_windows   = extract_sub(val_windows,   feat_list, feat_dic)
+                test_windows   = extract_sub(test_windows,  feat_list, feat_dic)
+                n_feat_sub = train_windows.shape[-1]  # F per sub-window
+
+                train_windows, val_windows, test_windows  = normalize_features(
+                                        train_windows,  val_windows,  test_windows)
+
                 weights = torch.tensor(compute_class_weight('balanced', 
                                             classes=np.arange(CLASSES), 
                                                 y=train_meta['classes']),
@@ -92,12 +124,12 @@ for rep in REPS:
                                             batch=BATCH_SIZE, shuffle=False, 
                                             workers=WORKERS, persistent_workers=PRESIST_WORKER)
 
-                model = MHCNN()
-                
+                model = LSTM_HCF(n_feat_sub, n_sub=N_SUB)
+
                 if FT:
                     model.load_state_dict(torch.load(join
-                        (CHECKPOINT_PATH, f'cross_mhcnn_{TAG}_{l_name}', 
-                        f'cross_mhcnn_{TAG}_{l_name}.pt'))['model_state_dict'])
+                        (CHECKPOINT_PATH, f'lstm_hcf', 
+                        f'lstm_hcf.pt'))['model_state_dict'])
 
                 weights = torch.tensor(compute_class_weight('balanced', 
                                             classes=np.arange(CLASSES), 

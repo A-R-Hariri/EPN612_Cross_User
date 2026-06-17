@@ -57,8 +57,12 @@ IS_MAIN = (RANK == 0)
 SEED = 13 + RANK
 random.seed(SEED); np.random.seed(SEED); torch.manual_seed(SEED)
 
+TAG = sys.argv[2] if len(sys.argv) > 2 else "raw"
+FEATS = sys.argv[3].split(',') if len(sys.argv) > 3 else feature_groups.keys()
+FEATS = list(FEATS)
+
+
 # load raw windows once
-TAG = 'raw'
 train_windows = np.load(join(PICKLE_PATH, f'train_windows_{TAG}.npy'), mmap_mode=MMAP_MODE)
 train_meta = np.load(join(PICKLE_PATH, f'train_meta_{TAG}.npy'), allow_pickle=True).item()
 val_windows = np.load(join(PICKLE_PATH, f'val_windows_{TAG}.npy'), mmap_mode=MMAP_MODE)
@@ -68,6 +72,10 @@ test_meta = np.load(join(PICKLE_PATH, f'test_meta_{TAG}.npy'), allow_pickle=True
 
 # main search loop
 for feat_key, feat_list in feature_groups.items():
+
+    if feat_key not in FEATS:
+        continue
+
     feat_dic = {}
     for f in feat_list:
         if f in [k.split('_')[0] for k in FEATURE_DIC.keys()]:
@@ -109,7 +117,7 @@ for feat_key, feat_list in feature_groups.items():
                 eval_test_lda(model=clf,
                             X={feat_key: te_full},
                             metas={feat_key: test_meta},
-                            name=name)
+                            save=False, name=name)
             dist.barrier() 
             continue
 
@@ -168,7 +176,7 @@ for feat_key, feat_list in feature_groups.items():
 
         if IS_MAIN:
             eval_test(model=model.module, name=name,
-                    csv_path = RESULTS_PATH,
+                    csv_path = RESULTS_PATH, save=False,
                     loaders={feat_key: test_loader},
                     metas={feat_key: test_meta})
 
