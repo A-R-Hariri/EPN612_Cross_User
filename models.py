@@ -10,14 +10,6 @@ from utils import *
 
 # -------- Proposed --------
 class MHCNN(nn.Module):
-    """
-    Proposed model: parallel dilated multi-horizon CNN on raw EMG.
-    Three parallel branches (dilation 1, 2, 4) capture activation
-    dynamics at ~40ms, ~80ms, and ~160ms receptive fields simultaneously,
-    covering the full temporal structure available within a 200ms window.
-
-    Input : (B, 8, 40) 
-    """
     def __init__(self, ch: int = CH, emb_dim: int = 128,
                  num_classes: int = CLASSES, dropout: float = DROPOUT):
         super().__init__()
@@ -498,67 +490,6 @@ class PrototypeLoss(nn.Module):
         return loss
 
 
-class OneVsAllLoss(nn.Module):
-    def __init__(self, lambda_proto=0.5, normalize=True, weight=None):
-        super().__init__()
-        self.lambda_proto = lambda_proto
-        self.normalize = normalize
-        self.ce = nn.CrossEntropyLoss(weight=weight)
-
-    def forward(self, emb, logits, labels):
-        if self.normalize:
-            emb = F.normalize(emb, dim=1)
-
-        ce = self.ce(logits, labels)
-        classes = torch.unique(labels)
-        proto_loss = 0.0
-
-        if len(classes) == 0:
-            pass
-        elif len(classes) == 1:
-            c = classes[0]
-            mask = labels == c
-            z = emb[mask]
-            if z.size(0) > 1:
-                proto = z.mean(dim=0, keepdim=True)
-                proto_loss = ((z - proto) ** 2).sum(dim=1).mean()
-        else:
-            # Multiple classes → full prototype loss:
-            #   - distance to own class mean  → lower loss when closer
-            #   - distance to every other class mean → lower loss when farther
-            # This is equivalent to a one-vs-all style softmax over negative distances
-            # (standard prototypical / metric-learning loss)
-            proto_list = []
-            class_to_idx = {}
-            for idx, c in enumerate(classes):
-                mask = labels == c
-                z = emb[mask]
-                proto = z.mean(dim=0)                     # (D,)
-                proto_list.append(proto)
-                class_to_idx[c.item()] = idx
-
-            protos = torch.stack(proto_list, dim=0)       # (K, D) where K = #classes in batch
-
-            # Squared Euclidean distances from every embedding to every prototype
-            # shape: (N, K)
-            dists = ((emb.unsqueeze(1) - protos.unsqueeze(0)) ** 2).sum(dim=-1)
-
-            target_idx = torch.tensor(
-                [class_to_idx[l.item()] for l in labels],
-                dtype=torch.long,
-                device=labels.device)
-
-            # Proto loss = CrossEntropy( -distances, true_class )
-            # → minimizing this simultaneously:
-            #     • pulls each sample toward its own class mean (closer = lower loss)
-            #     • pushes each sample away from all other class means (farther = lower loss)
-            proto_loss = F.cross_entropy(-dists, target_idx)
-
-        loss = (1 - self.lambda_proto) * ce + self.lambda_proto * proto_loss
-
-        return loss
-
-
 class TripletLoss(nn.Module):
     def __init__(self, margin=0.5, w_hard=1.0, w_soft=0.0,
                  batch_hard=True, normalize=True):
@@ -648,6 +579,67 @@ class TripletLoss(nn.Module):
 
 
 
+class OneVsAllLoss(nn.Module):
+    def __init__(self, lambda_proto=0.5, normalize=True, weight=None):
+        super().__init__()
+        self.lambda_proto = lambda_proto
+        self.normalize = normalize
+        self.ce = nn.CrossEntropyLoss(weight=weight)
+
+    def forward(self, emb, logits, labels):
+        if self.normalize:
+            emb = F.normalize(emb, dim=1)
+
+        ce = self.ce(logits, labels)
+        classes = torch.unique(labels)
+        proto_loss = 0.0
+
+        if len(classes) == 0:
+            pass
+        elif len(classes) == 1:
+            c = classes[0]
+            mask = labels == c
+            z = emb[mask]
+            if z.size(0) > 1:
+                proto = z.mean(dim=0, keepdim=True)
+                proto_loss = ((z - proto) ** 2).sum(dim=1).mean()
+        else:
+            # Multiple classes → full prototype loss:
+            #   - distance to own class mean  → lower loss when closer
+            #   - distance to every other class mean → lower loss when farther
+            # This is equivalent to a one-vs-all style softmax over negative distances
+            # (standard prototypical / metric-learning loss)
+            proto_list = []
+            class_to_idx = {}
+            for idx, c in enumerate(classes):
+                mask = labels == c
+                z = emb[mask]
+                proto = z.mean(dim=0)                     # (D,)
+                proto_list.append(proto)
+                class_to_idx[c.item()] = idx
+
+            protos = torch.stack(proto_list, dim=0)       # (K, D) where K = #classes in batch
+
+            # Squared Euclidean distances from every embedding to every prototype
+            # shape: (N, K)
+            dists = ((emb.unsqueeze(1) - protos.unsqueeze(0)) ** 2).sum(dim=-1)
+
+            target_idx = torch.tensor(
+                [class_to_idx[l.item()] for l in labels],
+                dtype=torch.long,
+                device=labels.device)
+
+            # Proto loss = CrossEntropy( -distances, true_class )
+            # → minimizing this simultaneously:
+            #     • pulls each sample toward its own class mean (closer = lower loss)
+            #     • pushes each sample away from all other class means (farther = lower loss)
+            proto_loss = F.cross_entropy(-dists, target_idx)
+
+        loss = (1 - self.lambda_proto) * ce + self.lambda_proto * proto_loss
+
+        return loss
+    
+    
 class AngularLoss(nn.Module):
     def __init__(self, temperature=0.07, normalize=True, weight=None, 
                  nm_label=0, w_ce=1.0, w_supcon=1.0, w_angle=1.0):
