@@ -1597,7 +1597,7 @@ def evaluate_ddp(model, loader, loss_fn,
             bal_acc, val_conf_matrix)
 
 
-def extract_full(windows, feat_list, feat_dic):
+def extract_full(windows, feat_list, feat_dic={}):
     fe = FeatureExtractor()
     return fe.extract_features(feat_list, windows, array=True,
                                fix_feature_errors=True,
