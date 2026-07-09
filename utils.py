@@ -1,6 +1,7 @@
 import os, copy, time, math
 import numpy as np, pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from sklearn.metrics import confusion_matrix, f1_score
 from sklearn.preprocessing import StandardScaler
 from concurrent.futures import ThreadPoolExecutor
@@ -809,61 +810,72 @@ def collect_embeddings(model, loader, device):
             labels.to(device, non_blocking=True))
 
 
-# Plot worker (runs in thread, never touches GPU)
+_GESTURE_NAMES = ['Rest', 'Hand Close', 'Flexion', 'Extension', 'Hand Open']
+_PALETTE       = ['#888888', '#4C72B0', '#DD8452', '#55A868', '#C44E52']
+_Z_ORDER       = [1, 2, 3, 4, 0]   # rest drawn last, sits on top at the fan origin
 def _plot_epoch(Z, y, title, path):
-    dims = Z.shape[1]
+    dims  = Z.shape[1]
+    n_cls = len(_PALETTE)
 
-    if dims == 2:
-        fig, ax = plt.subplots(figsize=(6, 6), dpi=100)
-        axes = [[ax]]
-        pairs = [(0, 1)]
-    else:
-        # Lower-triangle pair matrix
-        pairs = [(i, j) for i in range(dims) for j in range(i + 1, dims)]
-        fig, axes_flat = plt.subplots(dims - 1, dims - 1,
-                                      figsize=(3 * (dims - 1), 3 * (dims - 1)),
-                                      dpi=100)
-        axes_flat = np.array(axes_flat)
+    fig, axes = plt.subplots(dims, dims, figsize=(2 * dims, 2 * dims), dpi=150)
+    fig.subplots_adjust(hspace=0.06, wspace=0.06,
+                        left=0.10, right=0.97, top=0.90, bottom=0.12)
+    axes = np.atleast_2d(axes)
 
-    for (i, j) in pairs:
-        if dims == 2:
-            ax = axes[0][0]
-        else:
-            ax = axes_flat[j - 1, i]   # lower-triangle cell
+    scatter_kw = dict(s=5, alpha=0.55, linewidths=0, rasterized=True)
 
-        for cls, label in _GESTURE_LABELS.items():
-            mask = y == cls
-            if mask.any():
-                ax.scatter(Z[mask, i], Z[mask, j],
-                           s=4, alpha=0.6, label=label,
-                           color=plt.cm.tab10(cls / 10.0))
+    for i in range(dims):
+        for j in range(dims):
+            ax = axes[i, j]
+            if i == j:
+                # diagonal - per-PC marginal histograms
+                for cls in range(n_cls):
+                    mask = y == cls
+                    if mask.any():
+                        ax.hist(Z[mask, i], bins=28, color=_PALETTE[cls],
+                                alpha=0.55, linewidth=0, density=True)
+            elif i > j:
+                # off-diagonal - scatter of the single embedding projection
+                for cls in _Z_ORDER:
+                    mask = y == cls
+                    if mask.any():
+                        ax.scatter(Z[mask, j], Z[mask, i],
+                                   color=_PALETTE[cls], **scatter_kw)
 
-        ax.set_xlabel(f"PC{i + 1}", fontsize=7)
-        ax.set_ylabel(f"PC{j + 1}", fontsize=7)
-        ax.set_xticks([]); ax.set_yticks([])
+            else: ax.set_visible(False)
 
-    # Hide unused upper-triangle cells
-    if dims > 2:
-        for i in range(dims - 1):
-            for j in range(dims - 1):
-                if j > i:
-                    axes_flat[i, j].set_visible(False)
+            # spines
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_linewidth(0.4)
+            ax.spines['bottom'].set_linewidth(0.4)
+            # ticks
+            ax.tick_params(labelsize=6, length=2, width=0.4, pad=2)
+            ax.xaxis.set_major_locator(plt.MaxNLocator(3, prune='both'))
+            ax.yaxis.set_major_locator(plt.MaxNLocator(3, prune='both'))
+            if i < dims - 1:
+                ax.set_xticklabels([])
+            if j > 0:
+                ax.set_yticklabels([])
+            if i == dims - 1:
+                ax.set_xlabel(f"PC{j + 1}", fontsize=8)
+            if j == 0:
+                ax.set_ylabel(f"PC{i + 1}", fontsize=8)
 
-    # Single shared legend (top-right corner of figure)
+    # legend
     handles = [
-        plt.Line2D([0], [0], marker="o", color="w",
-                   markerfacecolor=plt.cm.tab10(cls / 10.0),
-                   markersize=6, label=label)
-        for cls, label in _GESTURE_LABELS.items()
+        mpatches.Patch(color=_PALETTE[c], label=_GESTURE_NAMES[c])
+        for c in range(n_cls)
     ]
-    fig.legend(handles=handles, title="Gesture", fontsize=8,
-               loc="upper right", framealpha=0.7)
+    fig.legend(handles=handles, fontsize=7.5, frameon=False,
+            loc='lower center', ncol=n_cls,
+            bbox_to_anchor=(0.53, 0.00),
+            handlelength=1.0, handleheight=0.85,
+            columnspacing=1.2)
 
-    fig.suptitle(title, fontsize=10, y=1.01)
-    fig.tight_layout()
-    fig.savefig(path, bbox_inches="tight")
+    fig.suptitle(title, fontsize=10, y=0.96)
+    fig.savefig(path, bbox_inches='tight')
     plt.close(fig)
-
 
 # PCA sweep
 @torch.no_grad()
