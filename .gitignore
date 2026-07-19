@@ -18,3 +18,5 @@ checkpoints
 v2
 *test*
 *.ipynb
+/user_sgt
+*.txt
