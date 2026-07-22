@@ -858,22 +858,22 @@ def _plot_epoch(Z, y, title, path):
             if j > 0:
                 ax.set_yticklabels([])
             if i == dims - 1:
-                ax.set_xlabel(f"PC{j + 1}", fontsize=8)
+                ax.set_xlabel(f"PC{j + 1}", fontsize=12)
             if j == 0:
-                ax.set_ylabel(f"PC{i + 1}", fontsize=8)
+                ax.set_ylabel(f"PC{i + 1}", fontsize=12)
 
     # legend
     handles = [
         mpatches.Patch(color=_PALETTE[c], label=_GESTURE_NAMES[c])
         for c in range(n_cls)
     ]
-    fig.legend(handles=handles, fontsize=7.5, frameon=False,
+    fig.legend(handles=handles, fontsize=12, frameon=False,
             loc='lower center', ncol=n_cls,
             bbox_to_anchor=(0.53, 0.00),
             handlelength=1.0, handleheight=0.85,
             columnspacing=1.2)
 
-    fig.suptitle(title, fontsize=10, y=0.96)
+    fig.suptitle(title, fontsize=12, y=0.96)
     fig.savefig(path, bbox_inches='tight')
     plt.close(fig)
 
@@ -912,6 +912,9 @@ def run_pca_sweep(model, loader, name, dims=2,
             model.load_state_dict(ckpt["model_state_dict"])
             epoch = ckpt["epoch"]
 
+            if epoch != best_ep:
+                continue
+
             feats, labels = collect_embeddings(model, loader, device)
             Z = pca.transform(feats).cpu().numpy()   # GPU matmul → CPU once
             y = labels.cpu().numpy()
@@ -921,7 +924,7 @@ def run_pca_sweep(model, loader, name, dims=2,
             pool.submit(
                 _plot_epoch, Z, y,
                 f"{name} | Epoch {epoch}",
-                f"{output_dir}/ep_{epoch:03d}.png")
+                f"{output_dir}/emb_{name}ep_{epoch:03d}.png")
         # ThreadPoolExecutor.__exit__ joins all pending saves before returning
             if epoch == best_ep:
                 break
