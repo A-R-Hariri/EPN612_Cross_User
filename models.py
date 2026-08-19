@@ -48,11 +48,6 @@ class MHCNN(nn.Module):
     
 
 class MLP(nn.Module):
-    """
-    Deep MLP on hand-crafted features, single window, no temporal context.
-
-    Input : (B, 8)  RMS per channel
-    """
     def __init__(self, n_features: int = 8, emb_dim: int = 128,
                  num_classes: int = CLASSES, dropout: float = DROPOUT):
         super().__init__()
@@ -82,12 +77,6 @@ class MLP(nn.Module):
 
 # LSTM variants  
 class LSTM(nn.Module):
-    """
-    LSTM over raw EMG timesteps within a single 200ms window.
-    Processes 40 raw timesteps x 8 channels.
-
-    Input : (B, 8, 40) ->  internally transposed to (B, 40, 8)
-    """
     def __init__(self, ch: int = CH, hidden: int = 128, num_layers: int = 3,
                  emb_dim: int = 128, num_classes: int = CLASSES,
                  dropout: float = DROPOUT):
@@ -125,12 +114,8 @@ class LSTM(nn.Module):
 
 class LSTM_HCF(nn.Module):
     """
-    LSTM over sub-windowed RMS features within a single 200ms window.
-    features: fine-grained temporal structure (4 x 50ms RMS steps)
-    rather than a single vector.
-
-    Input : (B, n_sub, 8)  sub-windowed RMS  (pre-computed, see extract_sub_rms)
-            default n_sub=4 → 4 x 50ms steps
+    Input : (B, n_sub, 8)  sub-windowed HCF
+            default n_sub=4 -> 4 x 50ms steps
     """
     def __init__(self, n_features: int = 8, n_sub: int = N_SUB,
                  hidden: int = 128, num_layers: int = 3,
@@ -168,10 +153,6 @@ class LSTM_HCF(nn.Module):
 
 class CNN(nn.Module):
     """
-    Single-scale CNN on raw EMG, single window.
-    Ablation of MHCNN: isolates the contribution of
-    multi-horizon parallel dilation from raw signal access alone.
-
     Input : (B, 8, 40) 
     """
     def __init__(self, ch: int = CH, emb_dim: int = 128,
@@ -211,7 +192,7 @@ class CNN(nn.Module):
 class CNN_HCF(nn.Module):
     """
     1D CNN over sub-windowed hand-crafted features.
-    Input : (B, F, 4)  — F features as channels, 4 sub-windows as time.
+    Input : (B, F, 4) - F features as channels, 4 sub-windows as time.
     """
     def __init__(self, n_feat: int, n_sub: int = N_SUB,
                  emb_dim: int = 128, num_classes: int = CLASSES,
@@ -454,6 +435,9 @@ class CVaRLoss(nn.Module):
 
 
 class PrototypeLoss(nn.Module):
+    """
+    Only prototypical compactness, no repulsion.
+    """
     def __init__(self, lambda_proto=0.5, normalize=True, weight=None):
         super().__init__()
         self.lambda_proto = lambda_proto
@@ -580,6 +564,9 @@ class TripletLoss(nn.Module):
 
 
 class OneVsAllLoss(nn.Module):
+    """
+    Prototypical loss with compactness and repulsion.
+    """
     def __init__(self, lambda_proto=0.5, normalize=True, weight=None):
         super().__init__()
         self.lambda_proto = lambda_proto
@@ -647,7 +634,7 @@ class AngularLoss(nn.Module):
         self.tau = temperature
         self.normalize = normalize
         self.ce = nn.CrossEntropyLoss(weight=weight)
-        self.nm_label = nm_label # Explicitly define which label is No Motion
+        self.nm_label = nm_label # Define which label is No Motion
         
         # Add weights to balance the loss scales
         self.w_ce = w_ce
@@ -674,7 +661,7 @@ class AngularLoss(nn.Module):
 
             protos = torch.stack(proto_list, dim=0)
 
-            # 1. FIX: Safely find the NM prototype
+            # Find the NM prototype
             if self.nm_label in class_to_idx:
                 nm_idx = class_to_idx[self.nm_label]
                 nm_proto = protos[nm_idx]
@@ -683,7 +670,7 @@ class AngularLoss(nn.Module):
                 active_mask = torch.arange(len(protos)) != nm_idx
                 active_protos = protos[active_mask]
 
-                # 2. FIX: Correctly calculate angular penalty on valid upper triangle
+                # Calculate angular penalty on valid upper triangle
                 if len(active_protos) > 1:
                     directions = F.normalize(active_protos - nm_proto, dim=1)
                     cos_sim = directions @ directions.T
@@ -699,7 +686,7 @@ class AngularLoss(nn.Module):
         
         pos_mask = (labels.unsqueeze(1) == labels.unsqueeze(0)) & mask_self
 
-        # 3. FIX: Numerical stability for exponents
+        # Numerical stability
         sim_max, _ = torch.max(sim, dim=1, keepdim=True)
         sim_stable = sim - sim_max.detach()
 
