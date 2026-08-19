@@ -1,6 +1,3 @@
-# ══════════════════════════════════════════════
-# cross_models.py
-# ══════════════════════════════════════════════
 import warnings, sys, os
 warnings.filterwarnings("ignore")
 os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1] if len(sys.argv) > 1 else "0"
