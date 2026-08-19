@@ -5,6 +5,7 @@ import matplotlib.patches as mpatches
 from sklearn.metrics import confusion_matrix, f1_score
 from sklearn.preprocessing import StandardScaler
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 
 import torch;
 import torch.distributed as dist
@@ -1825,15 +1826,6 @@ def eval_test_running(model, norm_layer, data, name, seed,
                               header=not os.path.exists(csv_path))
 
     return results
-
-
-import math
-from dataclasses import dataclass
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-from utils import *
 
 
 # ======== AUGMENTATION CONFIG ========
