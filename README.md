@@ -145,7 +145,7 @@ All loss functions accept `(logits, labels, *args)` so they are interchangeable 
 | `cvar` | `CVaRLoss` | Conditional Value at Risk: CE on the top-α% hardest samples per batch |
 | `std` | `STDLoss` | CE + regularization penalizing inter-subject loss variance directly |
 | `sbj` | `PerSubjectLoss` | Per-subject loss equity term |
-| `proto` | `PrototypeLoss` | CE + within-class prototype compactness |
+| `proto` | `PrototypeLoss` | CE + within-class prototype compactness (no repulsion) |
 | `1va` | `OneVsAllLoss` | CE + prototypical CE over negative squared distances to class means |
 | `ang` | `AngularLoss` | Direction-based contrastive loss respecting the radial embedding geometry |
 | `grl` | — | MHCNN_GRL + `BaseLoss` + domain classifier CE via gradient reversal |
