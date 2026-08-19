@@ -20,3 +20,5 @@ v2
 *.ipynb
 /user_sgt
 *.txt
+*.png
+*.jpg
