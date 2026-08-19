@@ -114,7 +114,7 @@ class TripletBatchSampler(Sampler):
         self.n_samples = max(3, int(batch_size) // (self.n_classes * self.n_subjects))
         self.batch_size = self.n_classes * self.n_subjects * self.n_samples
 
-        # Remap subjects to 0..S-1 (handles train 0..305 and test 305..611 cleanly)
+        # Remap subjects to 0..S-1 (handles train 0..305 and test 305..611)
         uniq_subj = torch.unique(self.subjects_raw).sort()[0]
         self.S = int(uniq_subj.numel())
         if self.S < self.n_subjects:
@@ -141,7 +141,6 @@ class TripletBatchSampler(Sampler):
         self.starts = torch.zeros(K + 1, dtype=torch.long)
         self.starts[1:] = torch.cumsum(self.counts, dim=0)
 
-        # <<< NEW: persistent cursor (this is the only real change) >>>
         self.cursor = torch.zeros(K, dtype=torch.long)
 
         # Epoch length based on total N (large epochs, no discard)
@@ -166,23 +165,20 @@ class TripletBatchSampler(Sampler):
             subj_perm = torch.randperm(self.S, generator=g)
             subj_ptr = 0
 
-            # cursor is now self.cursor (persistent across epochs)
-            # no local "cursor = torch.zeros..."
-
             def take_from_cell(cell: int) -> torch.Tensor:
                 cnt = int(self.counts[cell].item())
                 if cnt <= 0:
                     ridx = torch.randint(0, self.order.numel(), (self.n_samples,), generator=g)
                     return self.order[ridx]
 
-                p = int(self.cursor[cell].item())   # ← changed to self.cursor
+                p = int(self.cursor[cell].item()) 
 
                 # sequential without replacement
                 if p + self.n_samples <= cnt:
                     lo = int(self.starts[cell].item()) + p
                     hi = lo + self.n_samples
                     out = self.order[lo:hi]
-                    self.cursor[cell] = p + self.n_samples   # ← changed to self.cursor
+                    self.cursor[cell] = p + self.n_samples 
                     return out
 
                 # exhausted: reuse (no toss)
@@ -207,7 +203,7 @@ class TripletBatchSampler(Sampler):
                     pad = self.order[lo0 + ridx]
                     out = torch.cat([out, pad], dim=0)
 
-                self.cursor[cell] = 0   # ← changed to self.cursor
+                self.cursor[cell] = 0  
                 return out
 
             batches = 0
@@ -633,7 +629,7 @@ def train_triplet(model, train_loader, val_loader, name,
     while ep <= epochs:
 
         progress = min((ep - 1) / warmup_epochs, 1.0)
-        sig = 1 / (1 + math.exp(-10 * (progress - 0.65)))  # inflection at 65% of warmup
+        sig = 1 / (1 + math.exp(-10 * (progress - 0.65))) 
         sig_0 = 1 / (1 + math.exp(-10 * (0 - 0.65)))
         sig_1 = 1 / (1 + math.exp(-10 * (1 - 0.65)))
         current_alpha = alpha_start + (alpha_end - alpha_start) * (sig - sig_0) / (sig_1 - sig_0)
@@ -759,13 +755,12 @@ class PCA_GPU:
         Xc = X - self.mean_                          # N × D
         C  = torch.mm(Xc.T, Xc).div_(N - 1)         # D × D, in-place div
         _, eigvecs = torch.linalg.eigh(C)            # ascending eigenvalues
-        # eigh is already sorted ascending → last `dims` cols = top components
-        # flip once instead of argsort + fancy index
+        # eigh is already sorted ascending -> last `dims` cols = top components
         self.components_ = eigvecs[:, -self.dims:].flip(1).contiguous()
         return self
 
     def transform(self, X: torch.Tensor) -> torch.Tensor:
-        return (X - self.mean_) @ self.components_   # N × dims
+        return (X - self.mean_) @ self.components_   # N x dims
 
     def fit_transform(self, X: torch.Tensor) -> torch.Tensor:
         self.fit(X)
@@ -779,13 +774,13 @@ def collect_embeddings(model, loader, device):
     N = len(loader.dataset)
     is_cuda = (device == "cuda")
 
-    # Infer D from a single sample — don't waste a full forward pass
+    # Infer D from a single sample 
     sample_xb, *_ = next(iter(loader))
     with autocast(device_type="cuda", enabled=is_cuda):
         sample_emb = model(sample_xb[:1].to(device), return_emb=True)
     D = sample_emb.shape[1]
 
-    # Pinned CPU buffers — enables async DMA from GPU
+    # Pinned CPU buffers - enables async DMA from GPU
     feats  = torch.empty(N, D, dtype=torch.float32,
                          pin_memory=is_cuda)
     labels = torch.empty(N,    dtype=torch.long,
@@ -853,14 +848,13 @@ def _plot_epoch(Z, y, title, path):
             ax.tick_params(labelsize=6, length=2, width=0.4, pad=2)
             ax.xaxis.set_major_locator(plt.MaxNLocator(3, prune='both'))
             ax.yaxis.set_major_locator(plt.MaxNLocator(3, prune='both'))
-            if i < dims - 1:
-                ax.set_xticklabels([])
-            if j > 0:
-                ax.set_yticklabels([])
+            ax.set_yticklabels([])
+            ax.set_xticklabels([])
+            ax.tick_params(bottom=False, left=False)
             if i == dims - 1:
-                ax.set_xlabel(f"PC{j + 1}", fontsize=12)
+                ax.set_xlabel(f"PC{j + 1}", fontsize=16)
             if j == 0:
-                ax.set_ylabel(f"PC{i + 1}", fontsize=12)
+                ax.set_ylabel(f"PC{i + 1}", fontsize=16)
 
     # legend
     handles = [
@@ -873,7 +867,7 @@ def _plot_epoch(Z, y, title, path):
             handlelength=1.0, handleheight=0.85,
             columnspacing=1.2)
 
-    fig.suptitle(title, fontsize=12, y=0.96)
+    # fig.suptitle(title, fontsize=16, y=0.96)
     fig.savefig(path, bbox_inches='tight')
     plt.close(fig)
 
@@ -916,7 +910,7 @@ def run_pca_sweep(model, loader, name, dims=2,
                 continue
 
             feats, labels = collect_embeddings(model, loader, device)
-            Z = pca.transform(feats).cpu().numpy()   # GPU matmul → CPU once
+            Z = pca.transform(feats).cpu().numpy()   # GPU matmul -> CPU once
             y = labels.cpu().numpy()
             del feats, labels; torch.cuda.empty_cache()
 
@@ -924,7 +918,7 @@ def run_pca_sweep(model, loader, name, dims=2,
             pool.submit(
                 _plot_epoch, Z, y,
                 f"{name} | Epoch {epoch}",
-                f"{output_dir}/emb_{name}ep_{epoch:03d}.png")
+                f"{output_dir}/emb_{name}_ep_{epoch:03d}.png")
         # ThreadPoolExecutor.__exit__ joins all pending saves before returning
             if epoch == best_ep:
                 break
