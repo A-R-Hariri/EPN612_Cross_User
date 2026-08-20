@@ -45,7 +45,7 @@ CONFIGS = {
     'base': dict(model_cls=MHCNN, train_fn=train,
                  loss_fn=BaseLoss, train_kwargs=dict()),
     'std': dict(model_cls=MHCNN, train_fn=train,
-                s_fn=STDLoss, train_kwargs=dict()),
+                 loss_fn=STDLoss, train_kwargs=dict()),
     'cvar': dict(model_cls=MHCNN, train_fn=train,
                  loss_fn=CVaRLoss, train_kwargs=dict()),
     'rest': dict(model_cls=MHCNN, train_fn=train,
