@@ -28,7 +28,7 @@ MAX_SIL_WINDOWS = 6000
 MIN_CLASS_WINDOWS = 20
 
 VAL_CUTOFF = 332
-EXEMPLARS_REL = [22, 235, 103, 74]
+EXEMPLARS_REL = [22, 235, 74, 75]
 HARD_QUARTILE = 25
 EASY_QUARTILE = 75
 
@@ -319,6 +319,10 @@ def population_report(df, bal):
         lines.append(f'EVR of 4 PCs: within={g.evr4_within.mean():.3f} '
                      f'cross={g.evr4_cross.mean():.3f}')
         lines.append('')
+
+        t1 = hard.asi_within < asi_thr
+        t2 = hard.rli_within > rli_thr
+        print(f'{space} Type2 users:', hard.loc[(~t1 & t2), 'subject_rel'].tolist())
 
         quadrant_figure(g, asi_thr, rli_thr, space)
     return '\n'.join(lines)
