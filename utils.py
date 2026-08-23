@@ -46,7 +46,7 @@ _GESTURE_LABELS = {0: "NM", 1: "HC", 2: "FX", 3: "EX", 4: "HO"}
 EPOCHS = 300; BATCH_SIZE = 2048; DROPOUT = 0.2; PATIENCE = 15
 LR_FACTOR = 0.6; LR_PATIENCE = 7; LR_INIT = 5e-4; LR_MIN = 1e-6
 
-RN_PRIOR_WEIGHT = 0
+RN_PRIOR_WEIGHT = 1
 N_SUB     = 4       # 4 sub-windows × 10 samples = 40 samples total
 
 N_SUBJECTS = 306; MARGIN = 0.5; W_HARD = 1.0; W_SOFT = 0.0
