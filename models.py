@@ -384,7 +384,7 @@ def _balanced_mean(loss, logits, targets):
 
 
 class STDLoss(nn.Module):
-    def __init__(self, alpha=1.0):
+    def __init__(self, alpha=1.0, weight=None):
         super().__init__()
         self.alpha = alpha
         self.ce = nn.CrossEntropyLoss(reduction="none", weight=None)

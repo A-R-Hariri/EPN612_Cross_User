@@ -119,7 +119,7 @@ CONFIGS = {
                     return_emb=True, return_logits=True)),
     'trp': dict(model_cls=MHCNN, train_fn=train_triplet,
                 loader_fn=make_triplet_loaders,
-                ckpt_key=None,
+                loss_fn=lambda *a, **ka: None, ckpt_key=None,
                 train_kwargs=dict(
                     criterion_ce=nn.CrossEntropyLoss(weight=None),
                     criterion_tri=TripletLoss(margin=MARGIN, batch_hard=True,
