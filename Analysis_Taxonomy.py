@@ -28,7 +28,7 @@ MAX_SIL_WINDOWS = 6000
 MIN_CLASS_WINDOWS = 20
 
 VAL_CUTOFF = 332
-EXEMPLARS_REL = [22, 235, 74, 75]
+EXEMPLARS_REL = [22, 235, 74, 168]
 HARD_QUARTILE = 25
 EASY_QUARTILE = 75
 
@@ -396,13 +396,14 @@ def quadrant_figure(g, asi_thr, rli_thr, space):
                     s=18, linewidths=0, alpha=0.85)
     ax.axvline(asi_thr, color='0.4', lw=0.8, ls='--')
     ax.axhline(rli_thr, color='0.4', lw=0.8, ls='--')
-    for s in EXEMPLARS_REL:
+    for i, s in enumerate(EXEMPLARS_REL):
         p = g[g.subject_rel == s]
         if len(p):
             ax.scatter(p.asi_within, p.rli_within, facecolors='none',
-                       edgecolors='crimson', s=90, linewidths=1.2)
+                       edgecolors='crimson' if i else '#0aa7c6', s=90, linewidths=1.2)
             ax.annotate(f'U{s}', (float(p.asi_within.iloc[0]), float(p.rli_within.iloc[0])),
-                        textcoords='offset points', xytext=(6, 5), fontsize=8, color='crimson')
+                        textcoords='offset points', xytext=(6, 5), fontsize=8, 
+                        color='crimson' if i else "#0aa7c6")
     ax.set_xlabel('Angular separability index (Type 1 axis)')
     ax.set_ylabel('Rest leakage index (Type 2 axis)')
     ax.spines['top'].set_visible(False)
@@ -461,3 +462,6 @@ if __name__ == '__main__':
         g = df[(df.tag == 'raw') & (df.space == space)].sort_values('subject_rel')
         g = g.assign(bal_acc=bal[g.subject_rel.to_numpy()])
         index_vs_accuracy_figure(g, space)
+
+    sel = df[(df.tag == 'raw') & (df.rli_within > 0.005) & (df.asi_within > 0.21)]
+    print([i - VAL_CUTOFF for i in sel['subject'].tolist()])
