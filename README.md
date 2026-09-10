@@ -320,12 +320,6 @@ Training uses Adam, AMP autocast with `GradScaler`, gradient clipping, `ReduceLR
 
 Numeric results, statistics, and figures for these points live in the thesis and manuscripts, not in this repository.
 
-## Known gaps
-
-- `Analysis_Taxonomy.py` reads precomputed feature arrays at `pickles/{split}_{space}_{tag}.npy` (for example `test_weng_raw.npy`). No script in this repository currently writes those files; they must be produced with `extract_full` from `utils.py` before the taxonomy analysis will run.
-- `within_lda.py` still loads the legacy unsuffixed filenames (`train_data.npy`, `train_windows.npy`) that predate the four-variant naming scheme in `process_epn612.py`.
-- `inc_mhcnn.py` has a typo in the `std` entry of `CONFIGS` (`s_fn` instead of `loss_fn`), which will fail if that variant is selected. `inc_mhcnn_aug.py` is correct.
-
 ## Author
 
 Amir Hariri, Institute of Biomedical Engineering, University of New Brunswick.
