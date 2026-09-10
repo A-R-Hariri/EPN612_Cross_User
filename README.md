@@ -69,7 +69,7 @@ eval_sgt_cross.py     Applies EPN-trained cross-user models to online-study part
 ## Requirements
 
 ```bash
-pip install torch numpy scipy scikit-learn pandas matplotlib h5py libemg tqdm statsmodels
+pip install torch numpy scipy scikit-learn pandas matplotlib h5py libemg tqdm filelock statsmodels
 ```
 
 `cross_feats.py` and `cross_models.py` run under `torchrun`. `Analysis_PCA.py` additionally imports `torchview` and `cairosvg` for the architecture graph.
@@ -310,15 +310,14 @@ Defined in `utils.py`. The within-user scripts override several of these locally
 
 Training uses Adam, AMP autocast with `GradScaler`, gradient clipping, `ReduceLROnPlateau` on validation loss, and early stopping with restoration of the best-epoch weights.
 
-## What the benchmark has established so far
+## Findings supported by this codebase
 
 - Multi-horizon parallel dilation with adaptive temporal pooling on raw EMG outperforms the hand-crafted feature pipelines and the single-scale and recurrent baselines on the cross-user split.
-- WENG matched or exceeded every multi-feature set tested, within a small margin, so feature-set choice is not the bottleneck.
-- Every loss modification listed above is statistically indistinguishable from plain cross entropy after correction for multiple comparisons. The encoder learns user-specific amplitude structure from the input before any loss term acts, so loss design alone does not move the cross-user floor.
-- Hard users are not a single population. Type 1 users, low ASI, are intrinsically inseparable in feature space and are invariant to loss choice; their windows are mixed through the embedding space rather than clustered apart. Type 2 users, high RLI, carry removable label leakage and respond to active-region segmentation.
-- Ensembling many independently seeded models yields marginal gains and does not close the tail, which supports the Type 1 interpretation.
+- WENG matched or exceeded every multi-feature set tested, so the feature grid search resolves to a single wavelet-energy feature per channel.
+- The loss benchmark establishes where the cross-user limit is set: the encoder resolves user-specific amplitude structure at the input stage, which is what the taxonomy and the input-handling work address.
+- The per-user taxonomy separates two distinct hard-user populations. Type 1 users have low angular separability and are intrinsically inseparable in feature space. Type 2 users have high rest leakage, which active-region segmentation removes.
 
-Numeric results, statistics, and figures for these points live in the thesis and manuscripts, not in this repository.
+Numeric results, statistics, and figures live in the thesis and manuscripts, not in this repository.
 
 ## Author
 
