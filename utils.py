@@ -19,7 +19,6 @@ from sklearn.preprocessing import StandardScaler
 from libemg.feature_extractor import FeatureExtractor
 from torch.nn.utils import clip_grad_norm_
 
-
 def is_notebook():
     try:
         from IPython import get_ipython; shell = get_ipython()
