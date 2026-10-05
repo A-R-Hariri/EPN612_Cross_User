@@ -4,6 +4,7 @@ import warnings, sys, os
 warnings.filterwarnings("ignore")
 os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[1] if len(sys.argv) > 1 else "0"
 
+import csv
 import numpy as np
 import torch
 import libemg
@@ -18,6 +19,7 @@ from models import MHCNN
 USER_SGT_ROOT = "user_sgt"
 N_USERS       = 16
 VAL_REP       = [5]           # rep 5 is the held-out validation rep
+OUT_CSV       = "bacc_raw_vs_segmented.csv"
 
 pop_mean = np.array([-0.70885944, -0.74997824, -0.47742087, -0.73471236,
                      -0.99069226, -0.9039961,  -0.8920331,  -0.78142345],
@@ -44,25 +46,25 @@ MODELS = [
 
 def tkeo(x):
     return x[1:-1]**2 - x[:-2] * x[2:]
- 
- 
+
+
 def extract_active_segment(emg_data, window_size=5, threshold=0.25,
                             n_samples=SEQ + INC, method='energy'):
     seg_data, seg_classes, seg_reps, seg_subjects = [], [], [], []
     seg_sb, seg_se = [], []
- 
+
     total_original = total_kept = 0
- 
+
     for i in range(len(emg_data.data)):
         data_i  = np.asarray(emg_data.data[i])
         class_i = np.asarray(emg_data.classes[i])
         rep_i   = np.asarray(emg_data.reps[i])
         # subj_i  = np.asarray(emg_data.subjects[i])
- 
+
         t, ch = data_i.shape
         total_original += t
         current_class = class_i[0, 0]
- 
+
         if method == 'tkeo':
             best_val = -np.inf
             signal = None
@@ -78,13 +80,13 @@ def extract_active_segment(emg_data, window_size=5, threshold=0.25,
                     signal = smoothed
             if signal is None:
                 signal = np.zeros(t)
- 
+
         elif method == 'energy':
             channel_energies = [np.sum(data_i[:, idx] ** 2) for idx in range(ch)]
             main_ch_idx = int(np.argmax(channel_energies))
             signal = data_i[:, main_ch_idx] ** 2
             signal = np.convolve(signal, np.ones(window_size) / window_size, mode='same')
- 
+
         elif method == 'variance':
             if current_class == 3:
                 ch_candidates = [3, 4]
@@ -96,25 +98,25 @@ def extract_active_segment(emg_data, window_size=5, threshold=0.25,
             main_ch_idx = ch_candidates[int(np.argmax(mavs))]
             signal = np.abs(data_i[:, main_ch_idx])
             signal = np.convolve(signal, np.ones(window_size) / window_size, mode='same')
- 
+
         else:
             raise ValueError(f"Unknown method: {method}")
- 
+
         sig_min, sig_max = signal.min(), signal.max()
         signal_norm = (signal - sig_min) / (sig_max - sig_min + 1e-8)
         active_indices = np.where(signal_norm > threshold)[0]
- 
+
         if len(active_indices) > 1:
             start_idx = active_indices[0]
             end_idx   = active_indices[-1] + 1
         else:
             start_idx, end_idx = 0, t
- 
+
         # Fall back to full trial if segment is too short, class is rest, or no
         # active region was found.
         if (end_idx - start_idx) <= n_samples or current_class == 0 or len(active_indices) == 0:
             start_idx, end_idx = 0, t
- 
+
         total_kept += end_idx - start_idx
         seg_data.append(data_i[start_idx:end_idx])
         seg_classes.append(class_i[start_idx:end_idx])
@@ -122,13 +124,13 @@ def extract_active_segment(emg_data, window_size=5, threshold=0.25,
         # seg_subjects.append(subj_i[start_idx:end_idx])
         seg_sb.append(np.array([[start_idx]] * (end_idx - start_idx)))
         seg_se.append(np.array([[end_idx]]   * (end_idx - start_idx)))
- 
+
     pct_removed = 100 * (total_original - total_kept) / max(1, total_original)
     print(f"    Segmentation: {pct_removed:.1f}% of samples removed")
- 
+
     return seg_data, seg_classes, seg_reps, seg_subjects, seg_sb, seg_se
- 
- 
+
+
 def apply_segmentation(odh):
     odh.extra_attributes = getattr(odh, 'extra_attributes', [])
     odh.extra_attributes.append("sb")
@@ -233,7 +235,7 @@ def main():
             odh_cache[uid] = get_odh(uid)
             print(f"  User {uid:2d}: loaded")
         except Exception as e:
-            print(f"  User {uid:2d}: FAILED — {e}")
+            print(f"  User {uid:2d}: FAILED: {e}")
 
     print("\nExtracting raw val windows ...")
     raw_data = {}
@@ -257,6 +259,7 @@ def main():
 
     sep = "=" * 72
     results = {}
+    csv_rows = []
 
     for name, ckpt_key, use_rn, use_seg in MODELS:
         ckpt_path = join(CHECKPOINT_PATH, name, f"{name}.pt")
@@ -277,21 +280,32 @@ def main():
             print(f"  Failed to load checkpoint: {e}")
             continue
 
-        data_dict = seg_data if use_seg else raw_data
+        primary = "seg" if use_seg else "raw"
         rows = []
         for uid in user_ids:
-            if uid not in data_dict:
-                continue
-            w, c = data_dict[uid]
-            try:
-                acc, act_acc, bal_acc, f1 = infer(model, w, c, use_rn=use_rn)
+            metrics = {}
+            for tag, dd in (("raw", raw_data), ("seg", seg_data)):
+                if uid not in dd:
+                    continue
+                w, c = dd[uid]
+                try:
+                    metrics[tag] = infer(model, w, c, use_rn=use_rn)
+                except Exception as e:
+                    print(f"  User {uid:2d} [{tag}]: inference failed: {e}")
+
+            if primary in metrics:
+                acc, act_acc, bal_acc, f1 = metrics[primary]
                 rows.append((acc, act_acc, bal_acc, f1))
                 print(f"  User {uid:2d}  acc={acc*100:5.1f}%  "
                       f"act={act_acc*100:5.1f}%  "
                       f"bal={bal_acc*100:5.1f}%  "
                       f"f1={f1*100:5.1f}%")
-            except Exception as e:
-                print(f"  User {uid:2d}: inference failed — {e}")
+
+            csv_rows.append((
+                uid, name,
+                metrics["raw"][2] * 100 if "raw" in metrics else np.nan,
+                metrics["seg"][2] * 100 if "seg" in metrics else np.nan,
+            ))
 
         if rows:
             arr = np.array(rows) * 100
@@ -320,6 +334,15 @@ def main():
                   f"{m[2]:5.1f}±{s[2]:.1f}  "
                   f"{m[3]:5.1f}±{s[3]:.1f}")
         print(sep)
+
+    # ======== per-user BAcc CSV (raw vs segmented) ========
+    if csv_rows:
+        with open(OUT_CSV, "w", newline="") as f:
+            wr = csv.writer(f)
+            wr.writerow(["subject", "model", "bacc_raw", "bacc_segmented"])
+            for uid, name, b_raw, b_seg in csv_rows:
+                wr.writerow([uid, name, f"{b_raw:.4f}", f"{b_seg:.4f}"])
+        print(f"\nSaved {len(csv_rows)} rows to {OUT_CSV}")
 
 
 if __name__ == "__main__":
