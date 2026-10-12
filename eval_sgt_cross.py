@@ -19,7 +19,7 @@ from models import MHCNN
 USER_SGT_ROOT = "user_sgt"
 N_USERS       = 16
 VAL_REP       = [5]           # rep 5 is the held-out validation rep
-OUT_CSV       = "bacc_raw_vs_segmented.csv"
+OUT_CSV       = "per_subject_model_sgt.csv"
 
 pop_mean = np.array([-0.70885944, -0.74997824, -0.47742087, -0.73471236,
                      -0.99069226, -0.9039961,  -0.8920331,  -0.78142345],
@@ -329,10 +329,10 @@ def main():
             m = arr.mean(axis=0)
             s = arr.std(axis=0, ddof=1) if len(rows) > 1 else np.zeros(4)
             print(f"{name:<35} "
-                  f"{m[0]:5.1f}±{s[0]:4.1f}  "
-                  f"{m[1]:5.1f}±{s[1]:4.1f}  "
-                  f"{m[2]:5.1f}±{s[2]:.1f}  "
-                  f"{m[3]:5.1f}±{s[3]:.1f}")
+                  f"{m[0]:5.2f}±{s[0]:5.2f}  "
+                  f"{m[1]:5.2f}±{s[1]:5.2f}  "
+                  f"{m[2]:5.2f}±{s[2]:.2f}  "
+                  f"{m[3]:5.2f}±{s[3]:.2f}")
         print(sep)
 
     # ======== per-user BAcc CSV (raw vs segmented) ========
