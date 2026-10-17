@@ -19,9 +19,9 @@ from models import MHCNN
 USER_SGT_ROOT = "user_sgt"
 N_USERS       = 16
 VAL_REP       = [5]           # rep 5 is the held-out validation rep
-OUT_CSV       = "per_subject_model_sgt.csv"
-SHUFFLE       = False         # shuffle each user's windows before inference
-SHUFFLE_SEED  = 13
+OUT_CSV       = "per_subject_model_sgt2.csv"
+SHUFFLE       = True         # shuffle each user's windows before inference
+SHUFFLE_SEED  = 42
 
 pop_mean = np.array([-0.70885944, -0.74997824, -0.47742087, -0.73471236,
                      -0.99069226, -0.9039961,  -0.8920331,  -0.78142345],

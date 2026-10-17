@@ -4,6 +4,7 @@ checkpoints/*
 EPN612
 *_PROCESSED
 figures/*
+fitts_results/
 v1
 Data
 Analysis
@@ -22,3 +23,6 @@ pickles
 *.txt
 *.png
 *.jpg
+xtra_*
+paper2/
+runnorm_diagnostic/
