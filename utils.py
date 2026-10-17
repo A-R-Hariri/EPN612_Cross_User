@@ -35,6 +35,7 @@ else:
 DTYPE = np.float32
 PICKLE_PATH = 'pickles'; CHECKPOINT_PATH = 'checkpoints'; 
 FIGURE_PATH = 'figures'; RESULTS_PATH = f"{FIGURE_PATH}/results.csv"
+ANALYSIS_PATH = "Analysis"
 UPDATE_EVERY = 50; PRESIST_WORKER = False; PIN_MEMORY = True
 
 SEQ = 40; INC = 5; CH = 8; CLASSES = 5; VAL_CUTOFF = 332
