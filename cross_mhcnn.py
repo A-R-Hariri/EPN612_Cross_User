@@ -86,9 +86,9 @@ _eval_loaders = dict(raw=test_loader_raw, standard=test_loader_standard,
 _eval_metas = dict(raw=test_meta_raw, standard=test_meta_standard,
                    segmented=test_meta_segmented, relabeled=test_meta_relabeled)
 _eval_windows = dict(raw=(test_windows_raw, test_meta_raw),
-                     standard=(test_windows_raw, test_meta_standard),
-                     segmented=(test_windows_raw, test_meta_segmented),
-                     relabeled=(test_windows_raw, test_meta_relabeled))
+                     standard=(test_windows_standard, test_meta_standard),
+                     segmented=(test_windows_segmented, test_meta_segmented),
+                     relabeled=(test_windows_relabeled, test_meta_relabeled))
 
 
 # -------- model configs --------
