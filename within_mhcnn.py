@@ -19,7 +19,7 @@ from models import *
 
 
 WORKERS = 0; PRE_FETCH = 2; VERBOSE=False
-BATCH_SIZE=64; PATIENCE = 5; LR_PATIENCE = 3
+BATCH_SIZE=64; PATIENCE = 15; LR_PATIENCE = 7
 PRESIST_WORKER = False; PIN_MEMORY = True
 
 SEED = 13; random.seed(SEED); np.random.seed(SEED)
