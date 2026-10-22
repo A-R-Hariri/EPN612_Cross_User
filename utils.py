@@ -1377,7 +1377,7 @@ def create_loader_ddp(x, y, s, batch, rank, world_size,
         drop_last=True)      # keeps batch sizes uniform across ranks
     return DataLoader(
         TensorDataset(torch.from_numpy(x), torch.from_numpy(y), torch.from_numpy(s)),
-        batch_size=batch,
+        batch_size=batch // world_size,
         sampler=sampler,     # shuffle=False because sampler handles it
         num_workers=workers,
         prefetch_factor=prefetch_factor if workers > 0 else None,
