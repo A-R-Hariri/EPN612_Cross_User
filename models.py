@@ -18,8 +18,8 @@ class MHCNN(nn.Module):
         self.conv3 = nn.Conv1d(ch, 32, 8, dilation=4, padding='same')
         self.conv4 = nn.Conv1d(96, 128, 4, dilation=1, padding='same')
         self.pool  = nn.AdaptiveAvgPool1d(1)
-        self.fc1        = nn.Linear(128, 128)
-        self.fc_emb     = nn.Linear(128, emb_dim)
+        self.fc1 = nn.Linear(128, 128)
+        self.fc_emb = nn.Linear(128, emb_dim)
         self.classifier = nn.Linear(emb_dim, num_classes)
         self.drop = nn.Dropout(dropout)
         self.relu = nn.ReLU()
@@ -33,14 +33,14 @@ class MHCNN(nn.Module):
 
     def forward(self, x, return_emb=False, return_logits=False):
         # x: (B, 8, 40)
-        x = x / 128.0       # Scaling, not normalization
+        x = x / 128.0 # Scaling, not normalization
         x1 = self.drop(self.relu(self.conv1(x)))
         x2 = self.drop(self.relu(self.conv2(x)))
         x3 = self.drop(self.relu(self.conv3(x)))
-        x  = self.drop(self.relu(self.conv4(torch.cat((x1, x2, x3), dim=1))))
-        x  = self.pool(x).squeeze(-1)
-        x      = self.drop(self.gelu(self.fc1(x)))
-        emb    = self.fc_emb(x)
+        x = self.drop(self.relu(self.conv4(torch.cat((x1, x2, x3), dim=1))))
+        x = self.pool(x).squeeze(-1)
+        x = self.drop(self.gelu(self.fc1(x)))
+        emb = self.fc_emb(x)
         logits = self.classifier(emb)
         if return_emb and return_logits: return emb, logits
         if return_emb:                   return emb
@@ -127,11 +127,11 @@ class LSTM_HCF(nn.Module):
             batch_first=True,
             dropout=dropout if num_layers > 1 else 0.0
         )
-        self.fc1        = nn.Linear(hidden, 128)
-        self.fc_emb     = nn.Linear(128, emb_dim)
+        self.fc1 = nn.Linear(hidden, 128)
+        self.fc_emb = nn.Linear(128, emb_dim)
         self.classifier = nn.Linear(emb_dim, num_classes)
-        self.drop       = nn.Dropout(dropout)
-        self.gelu       = nn.GELU()
+        self.drop = nn.Dropout(dropout)
+        self.gelu = nn.GELU()
         self.apply(self._init)
 
     def _init(self, m):
@@ -142,9 +142,9 @@ class LSTM_HCF(nn.Module):
     def forward(self, x, return_emb=False, return_logits=False):
         # x: (B, n_sub, 8)
         _, (h_n, _) = self.lstm(x)
-        x      = h_n[-1]                 # (B, hidden)
-        x      = self.drop(self.gelu(self.fc1(x)))
-        emb    = self.fc_emb(x)
+        x = h_n[-1]                 # (B, hidden)
+        x = self.drop(self.gelu(self.fc1(x)))
+        emb = self.fc_emb(x)
         logits = self.classifier(emb)
         if return_emb and return_logits: return emb, logits
         if return_emb:                   return emb
@@ -296,12 +296,11 @@ class MHCNN_GRL(nn.Module):
         x = torch.cat((x1, x2, x3), 1)
         x = self.relu(self.conv4(x))
         x = self.drop(x)
-
         x = self.pool(x).squeeze(-1)
         # x = x.flatten(1)
-
         x = self.fc1(x)
         x = self.gelu(x)
+        x = self.drop(x)
         emb = self.fc_emb(x)
 
         logits = self.classifier(emb)
