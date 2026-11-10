@@ -610,7 +610,7 @@ def train_triplet(model, train_loader, val_loader, name,
                   lr_factor=LR_FACTOR, lr_patience=LR_PATIENCE, 
                   patience=PATIENCE, device=DEVICE, verbose=VERBOSE,
                   alpha_start=0.0, alpha_end=0.2, warmup_epochs=20,
-                  save_chkp=False):
+                  save_chkp=False, **kwargs):
 
     model.to(device)
     opt = Adam([p for p in model.parameters() if p.requires_grad], lr=lr)

@@ -3,7 +3,7 @@
 /EPN612
 /user_sgt
 /checkpoints
-/pickles
+/pickles*
 /Data
 *.pkl
 *.pt
@@ -19,7 +19,9 @@
 /Analysis
 /paper1
 /paper2
+/paper3
 /runnorm_diagnostic
+emg_epn100.py
 *test*
 *.csv
 *.xlsx
